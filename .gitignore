@@ -1,4 +1,4 @@
 node_modules/
-.tokens.json
-*.log
+coverage/
 .DS_Store
+*.log
