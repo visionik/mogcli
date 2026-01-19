@@ -1,7 +1,7 @@
 import { homedir } from 'os';
 import { join } from 'path';
 
-export const CONFIG_DIR = join(homedir(), '.config', 'mic');
+export const CONFIG_DIR = join(homedir(), '.config', 'mog');
 export const TOKENS_FILE = join(CONFIG_DIR, 'tokens.json');
 export const SETTINGS_FILE = join(CONFIG_DIR, 'settings.json');
 

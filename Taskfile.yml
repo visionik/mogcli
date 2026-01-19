@@ -1,0 +1,68 @@
+version: '3'
+
+vars:
+  COVERAGE_MIN: 85
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  install:
+    desc: Install dependencies
+    cmds:
+      - npm install
+
+  fmt:
+    desc: Format code with Prettier
+    cmds:
+      - npx prettier --write 'src/**/*.js' 'bin/**/*.js'
+
+  fmt:check:
+    desc: Check formatting without writing
+    cmds:
+      - npx prettier --check 'src/**/*.js' 'bin/**/*.js'
+
+  lint:
+    desc: Run ESLint
+    cmds:
+      - npx eslint src bin --ext .js
+
+  lint:fix:
+    desc: Run ESLint with auto-fix
+    cmds:
+      - npx eslint src bin --ext .js --fix
+
+  test:
+    desc: Run tests
+    cmds:
+      - npx vitest run
+
+  test:watch:
+    desc: Run tests in watch mode
+    cmds:
+      - npx vitest
+
+  test:coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - npx vitest run --coverage
+
+  quality:
+    desc: Run all quality checks (no tests)
+    cmds:
+      - task: fmt:check
+      - task: lint
+
+  check:
+    desc: Pre-commit checks (fmt + lint + test)
+    cmds:
+      - task: fmt:check
+      - task: lint
+      - task: test
+
+  build:
+    desc: Verify the CLI runs
+    cmds:
+      - node bin/mic.js --version

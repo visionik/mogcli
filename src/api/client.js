@@ -6,27 +6,27 @@ import { getValidAccessToken } from '../auth.js';
  */
 export async function graphRequest(endpoint, options = {}) {
   const accessToken = await getValidAccessToken();
-  
+
   const url = endpoint.startsWith('http') ? endpoint : `${GRAPH_BASE_URL}${endpoint}`;
   const response = await fetch(url, {
     ...options,
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
-      ...options.headers
-    }
+      ...options.headers,
+    },
   });
-  
+
   if (response.status === 204) {
     return null; // No content
   }
-  
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     const message = error.error?.message || `API request failed: ${response.status}`;
     throw new Error(message);
   }
-  
+
   return response.json();
 }
 
@@ -35,22 +35,22 @@ export async function graphRequest(endpoint, options = {}) {
  */
 export async function graphRequestRaw(endpoint, options = {}) {
   const accessToken = await getValidAccessToken();
-  
+
   const url = endpoint.startsWith('http') ? endpoint : `${GRAPH_BASE_URL}${endpoint}`;
   const response = await fetch(url, {
     ...options,
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      ...options.headers
-    }
+      Authorization: `Bearer ${accessToken}`,
+      ...options.headers,
+    },
   });
-  
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     const message = error.error?.message || `API request failed: ${response.status}`;
     throw new Error(message);
   }
-  
+
   return response;
 }
 

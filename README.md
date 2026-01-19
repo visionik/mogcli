@@ -1,238 +1,238 @@
-# mic
+# mog — Microsoft Graph CLI
 
-A command-line interface for Microsoft 365, powered by Microsoft Graph API.
+A command-line interface for Microsoft 365: Mail, Calendar, OneDrive, To-Do, and Contacts.
 
-Like [gog](https://gogcli.sh) but for Microsoft.
+Modeled after [gog](https://github.com/slashbaseide/gog) for consistent patterns across Google and Microsoft CLIs.
 
 ## Features
 
-- 📧 **Mail** — Search, send, reply, drafts
-- 📅 **Calendar** — Events, create, delete
-- 📁 **Drive** — OneDrive files, search, upload, download
-- 👥 **Contacts** — List, search contacts
-- ✅ **To-Do** — Tasks, lists, complete, delete
+- **Mail** — Search, send, drafts, attachments, folders
+- **Calendar** — Events, create, update, delete, respond to invites
+- **OneDrive** — List, search, upload, download, move, rename, copy
+- **To-Do** — Tasks, lists, add, update, complete, undo
+- **Contacts** — List, search, create, update, delete
 
-## Quick Start
+**Extras:**
+- **Slug system** — 8-character shorthand for Microsoft's long GUIDs
+- **AI-friendly** — `--ai-help` outputs comprehensive documentation for LLMs
+- **gog-compatible** — Same flags and patterns where applicable
+
+## Installation
 
 ```bash
-# Install
-cd mic && npm link
+# Clone the repo
+git clone https://github.com/visionik/mogcli.git
+cd mogcli
 
-# Authenticate (one-time)
-mic auth login --client-id YOUR_CLIENT_ID
+# Install dependencies
+npm install
 
-# Use it
-mic mail search "from:boss"
-mic cal list
-mic drive ls
-mic todo tasks
+# Link globally
+npm link
 ```
 
 ## Setup
 
-### 1. Register an Azure AD Application
+### 1. Create an Azure AD App
 
-1. Go to [Azure Portal](https://portal.azure.com/)
-2. Navigate to **Azure Active Directory** → **App registrations**
-3. Click **New registration**
-4. Fill in:
-   - **Name:** `mic-cli`
-   - **Supported account types:** "Accounts in any organizational directory and personal Microsoft accounts"
-   - **Redirect URI:** Leave blank
-5. Click **Register**
-6. Copy the **Application (client) ID**
+1. Go to [Azure Portal](https://portal.azure.com) → **App registrations** → **New registration**
+2. Name: `mog CLI` (or any name)
+3. Supported account types: Select based on your needs
+4. Redirect URI: Leave blank (uses device code flow)
 
-### 2. Configure API Permissions
+### 2. Add API Permissions
 
-In your app registration, go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions**:
+Add these **Delegated** permissions:
 
-- `Mail.ReadWrite`
-- `Mail.Send`
-- `Calendars.ReadWrite`
-- `Files.ReadWrite.All`
-- `Contacts.Read`
-- `People.Read`
-- `Tasks.ReadWrite`
-- `User.Read`
-- `offline_access`
+| Permission | Description |
+|------------|-------------|
+| `User.Read` | Sign in and read user profile |
+| `offline_access` | Maintain access (refresh tokens) |
+| `Mail.ReadWrite` | Read and write mail |
+| `Mail.Send` | Send mail |
+| `Calendars.ReadWrite` | Full calendar access |
+| `Files.ReadWrite.All` | Full OneDrive access |
+| `Contacts.Read` | Read contacts |
+| `Contacts.ReadWrite` | Full contacts access |
+| `People.Read` | Read people |
+| `Tasks.ReadWrite` | Read and write tasks |
 
-### 3. Enable Public Client Flow
-
-1. Go to **Authentication**
-2. Under **Advanced settings**, set **Allow public client flows** to **Yes**
-3. Click **Save**
-
-### 4. Install
+### 3. Authenticate
 
 ```bash
-cd mic
-npm install
-npm link
+mog auth login --client-id YOUR_CLIENT_ID
+```
+
+This opens a browser for Microsoft login. Tokens are stored at `~/.config/mog/tokens.json`.
+
+### 4. Verify
+
+```bash
+mog auth status
 ```
 
 ## Usage
 
-### Authentication
+### Global Options
 
-```bash
-mic auth login --client-id YOUR_CLIENT_ID
-mic auth status
-mic auth logout
+```
+--json       Output JSON (best for scripting)
+--plain      Stable text output (TSV, no colors)
+--verbose    Show full IDs and extra details
+--force      Skip confirmations
+--no-input   Never prompt (CI mode)
+--ai-help    Comprehensive docs for LLMs
 ```
 
 ### Mail
 
 ```bash
-# Search
-mic mail search "subject:meeting"
-mic mail search "from:alice" --max 10
-mic mail search "has:attachment" --folder Inbox
+mog mail search "from:someone"          # Search messages
+mog mail search "*" --max 10            # Recent messages
+mog mail get <id>                       # Read a message
+mog mail send --to a@b.com --subject "Hi" --body "Hello"
+mog mail folders                        # List folders
 
-# Send
-mic mail send --to bob@example.com --subject "Hello" --body "Hi Bob!"
-mic mail send --to bob@example.com --subject "Report" --body-file ./report.txt
-mic mail send --to bob@example.com --subject "HTML" --body-html "<h1>Hello</h1>"
+# Drafts
+mog mail drafts list
+mog mail drafts create --to a@b.com --subject "Draft" --body "..."
+mog mail drafts send <draftId>
+mog mail drafts delete <draftId>
 
-# Multi-line via stdin
-mic mail send --to bob@example.com --subject "Notes" --body-file - <<EOF
-Hi Bob,
-
-Here are my notes.
-
-Best,
-Alice
-EOF
-
-# Read message
-mic mail get MESSAGE_ID
-
-# List folders
-mic mail folders
+# Attachments
+mog mail attachment list <messageId>
+mog mail attachment download <messageId> <attachmentId> --out ./file.pdf
 ```
 
 ### Calendar
 
 ```bash
-# List events
-mic cal list
-mic cal list --from 2026-01-20T00:00:00 --to 2026-01-27T00:00:00
+mog cal list                            # Upcoming events
+mog cal list --from 2025-01-01 --to 2025-01-31
+mog cal calendars                       # List calendars
 
-# Create event
-mic cal create --subject "Team Sync" --start 2026-01-20T10:00:00 --end 2026-01-20T11:00:00
-mic cal create --subject "Lunch" --start 2026-01-20T12:00:00 --end 2026-01-20T13:00:00 --location "Cafe"
+mog cal create --summary "Meeting" \
+  --from 2025-01-15T10:00:00 \
+  --to 2025-01-15T11:00:00
 
-# View event
-mic cal get EVENT_ID
+mog cal update <eventId> --summary "New Title"
+mog cal get <eventId>
+mog cal delete <eventId>
 
-# Delete event
-mic cal delete EVENT_ID
-
-# List calendars
-mic cal calendars
+# Respond to invites
+mog cal respond <eventId> accept
+mog cal respond <eventId> decline --comment "Can't make it"
+mog cal respond <eventId> tentative
 ```
 
-### Drive (OneDrive)
+### OneDrive
 
 ```bash
-# List files
-mic drive ls
-mic drive ls /Documents
-mic drive ls FOLDER_ID
+mog drive ls                            # Root folder
+mog drive ls /Documents                 # Specific path
+mog drive search "report"               # Search files
+mog drive get <itemId>                  # File metadata
 
-# Search
-mic drive search "report"
-mic drive search "*.pdf"
+mog drive download <itemId> --out ./file.pdf
+mog drive upload ./doc.pdf
+mog drive upload ./doc.pdf --folder <folderId> --name "renamed.pdf"
 
-# Download
-mic drive download ITEM_ID --out ./file.pdf
-
-# Upload
-mic drive upload ./report.pdf
-mic drive upload ./data.xlsx --folder FOLDER_ID
-
-# Create folder
-mic drive mkdir "New Folder"
-mic drive mkdir "Subfolder" --parent FOLDER_ID
-
-# Delete
-mic drive rm ITEM_ID
-```
-
-### Contacts
-
-```bash
-# List
-mic contacts list
-mic contacts list --max 100
-
-# Search
-mic contacts search "alice"
-mic contacts search "example.com"
-
-# View
-mic contacts get CONTACT_ID
+mog drive mkdir "New Folder"
+mog drive move <itemId> <destinationId>
+mog drive rename <itemId> "new-name.pdf"
+mog drive copy <itemId> --name "copy.pdf"
+mog drive rm <itemId>
 ```
 
 ### To-Do
 
 ```bash
-# Lists
-mic todo lists
+mog todo lists                          # List task lists
+mog todo list                           # Tasks in default list
+mog todo list <listId>                  # Tasks in specific list
+mog todo list --all                     # Include completed
 
-# Tasks
-mic todo tasks
-mic todo tasks "Shopping"
-mic todo tasks --all  # Include completed
+mog todo add "Buy milk"
+mog todo add "Call mom" --due tomorrow --notes "Birthday planning"
+mog todo add "Review PR" --list Work --due monday --important
 
-# Add
-mic todo add "Buy milk"
-mic todo add "Call Bob" --due tomorrow
-mic todo add "Meeting prep" --due monday --important
-mic todo add "Groceries" --list "Shopping"
-
-# Complete
-mic todo complete TASK_ID
-mic todo done TASK_ID
-
-# Delete
-mic todo delete TASK_ID
-mic todo rm TASK_ID
+mog todo update <taskId> --title "New title" --due friday
+mog todo done <taskId>
+mog todo undo <taskId>
+mog todo delete <taskId>
 ```
+
+### Contacts
+
+```bash
+mog contacts list
+mog contacts search "john"
+mog contacts get <contactId>
+
+mog contacts create --name "John Doe" --email "john@example.com" --phone "555-1234"
+mog contacts update <contactId> --email "new@example.com"
+mog contacts delete <contactId>
+```
+
+## Slugs
+
+Microsoft Graph uses very long GUIDs. mog generates 8-character slugs for convenience:
+
+```
+Full:  AQMkADAwATMzAGZmAS04MDViLTRiNzgt...
+Slug:  a3f2c891
+```
+
+- All commands output slugs by default
+- All commands accept either slugs or full IDs
+- Use `--verbose` to also see full IDs
+- Slugs are cached in `~/.config/mog/slugs.json`
+- `mog auth logout` clears the cache
+
+## For AI Agents
+
+Run `mog --ai-help` for comprehensive, machine-readable documentation including:
+
+- All commands and options
+- Date/time format specifications
+- Positive and negative examples
+- Exit codes and piping patterns
+- Troubleshooting guide
+
+This follows the [dashdash](https://github.com/visionik/dashdash) specification.
+
+## Configuration
+
+| File | Purpose |
+|------|---------|
+| `~/.config/mog/tokens.json` | OAuth tokens (sensitive) |
+| `~/.config/mog/settings.json` | Client ID and settings |
+| `~/.config/mog/slugs.json` | ID-to-slug cache |
 
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `MIC_CLIENT_ID` | Azure AD application client ID |
+| `MOG_CLIENT_ID` | Azure AD client ID (alternative to --client-id) |
 
-## JSON Output
-
-All commands support `--json` for machine-readable output:
+## Development
 
 ```bash
-mic mail search "test" --json
-mic cal list --json
-mic drive ls --json
-mic contacts list --json
-mic todo tasks --json
+# Run tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Lint
+npm run lint
+
+# Format
+npm run fmt
+
+# All checks
+npm run check
 ```
-
-## Token Storage
-
-Tokens are stored in `~/.config/mic/tokens.json`. Refresh tokens are used automatically.
-
-## Comparison with gog
-
-| gog | mic | Notes |
-|-----|-----|-------|
-| `gog gmail search` | `mic mail search` | |
-| `gog gmail send` | `mic mail send` | |
-| `gog calendar events` | `mic cal list` | |
-| `gog calendar create` | `mic cal create` | Uses `--subject` not `--summary` |
-| `gog drive list` | `mic drive ls` | |
-| `gog drive upload` | `mic drive upload` | |
-| `gog contacts list` | `mic contacts list` | |
-| N/A | `mic todo` | Microsoft To-Do |
 
 ## License
 
