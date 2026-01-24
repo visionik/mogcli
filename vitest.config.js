@@ -11,6 +11,7 @@ export default defineConfig({
       exclude: [
         'src/**/*.test.js',
         'src/**/*.spec.js',
+        'src/integration/**', // Integration tests (real API)
         'src/ai-help.js', // Static help text (576 lines)
         'src/api/client.js', // HTTP wrapper (requires real API)
         'src/commands/auth.js', // Interactive auth flow

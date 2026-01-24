@@ -7,9 +7,10 @@
     "mog": "./bin/mog.js"
   },
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test": "vitest run --exclude 'src/integration/**'",
+    "test:watch": "vitest --exclude 'src/integration/**'",
+    "test:coverage": "vitest run --coverage --exclude 'src/integration/**'",
+    "test:integration": "MOG_INTEGRATION_TESTS=1 vitest run src/integration/",
     "lint": "eslint src bin --ext .js",
     "lint:fix": "eslint src bin --ext .js --fix",
     "fmt": "prettier --write 'src/**/*.js' 'bin/**/*.js'",
