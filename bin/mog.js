@@ -52,6 +52,7 @@ import {
   contactsUpdate,
   contactsDelete,
 } from '../src/commands/contacts.js';
+import { wordList, wordGet, wordExport, wordCopy, wordCreate } from '../src/commands/word.js';
 import { printAiHelp } from '../src/ai-help.js';
 
 // Handle --ai-help before commander parses (eager processing)
@@ -355,6 +356,38 @@ contacts
   .alias('rm')
   .description('Delete a contact')
   .action(withGlobalOpts(contactsDelete));
+
+// ============ Word (Docs) ============
+const word = program.command('word').alias('docs').description('Word documents');
+
+word
+  .command('list')
+  .description('List Word documents')
+  .option('--max <n>', 'Maximum results', '50')
+  .action(withGlobalOpts(wordList));
+
+word.command('get <docId>').description('Get document metadata').action(withGlobalOpts(wordGet));
+
+word
+  .command('export <docId>')
+  .description('Export a document')
+  .requiredOption('--out <path>', 'Output file path')
+  .option('--format <format>', 'Export format: docx, pdf', 'docx')
+  .action(withGlobalOpts(wordExport));
+
+word
+  .command('copy <docId>')
+  .description('Copy a document')
+  .requiredOption('--name <name>', 'Name for the copy')
+  .option('--folder <folderId>', 'Destination folder ID')
+  .action(withGlobalOpts(wordCopy));
+
+word
+  .command('create')
+  .description('Create a new Word document')
+  .requiredOption('--title <name>', 'Document name')
+  .option('--folder <folderId>', 'Destination folder ID')
+  .action(withGlobalOpts(wordCreate));
 
 // ============ To-Do (Tasks) ============
 const todo = program.command('todo').alias('tasks').description('Microsoft To-Do tasks');
