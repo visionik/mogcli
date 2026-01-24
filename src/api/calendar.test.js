@@ -14,6 +14,8 @@ import {
   updateEvent,
   deleteEvent,
   respondToEvent,
+  getFreeBusy,
+  getCalendarPermissions,
 } from './calendar.js';
 
 describe('calendar API', () => {
@@ -264,6 +266,76 @@ describe('calendar API', () => {
         '/me/calendars/cal123/events/event1/accept',
         expect.any(Object)
       );
+    });
+  });
+
+  describe('getFreeBusy', () => {
+    it('posts schedule request to Graph API', async () => {
+      const mockSchedule = {
+        value: [
+          {
+            scheduleId: 'user@example.com',
+            scheduleItems: [
+              { status: 'busy', start: { dateTime: '2025-01-15T10:00:00' }, end: { dateTime: '2025-01-15T11:00:00' } }
+            ]
+          }
+        ]
+      };
+      graphRequest.mockResolvedValue(mockSchedule);
+
+      const result = await getFreeBusy(
+        ['user@example.com'],
+        '2025-01-15T09:00:00',
+        '2025-01-15T17:00:00'
+      );
+
+      expect(graphRequest).toHaveBeenCalledWith(
+        '/me/calendar/getSchedule',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('user@example.com'),
+        })
+      );
+      expect(result).toEqual(mockSchedule);
+    });
+
+    it('supports multiple email addresses', async () => {
+      graphRequest.mockResolvedValue({ value: [] });
+
+      await getFreeBusy(
+        ['alice@example.com', 'bob@example.com'],
+        '2025-01-15T09:00:00',
+        '2025-01-15T17:00:00'
+      );
+
+      expect(graphRequest).toHaveBeenCalledWith(
+        '/me/calendar/getSchedule',
+        expect.objectContaining({
+          body: expect.stringContaining('alice@example.com'),
+        })
+      );
+    });
+  });
+
+  describe('getCalendarPermissions', () => {
+    it('fetches permissions from default calendar', async () => {
+      const mockPermissions = [
+        { id: 'perm1', role: 'owner', emailAddress: { address: 'owner@example.com' } }
+      ];
+      graphRequest.mockResolvedValue({ value: mockPermissions });
+
+      const result = await getCalendarPermissions();
+
+      expect(graphRequest).toHaveBeenCalledWith('/me/calendar/calendarPermissions');
+      expect(result).toEqual(mockPermissions);
+    });
+
+    it('fetches permissions from specific calendar', async () => {
+      graphRequest.mockResolvedValue({ value: [] });
+
+      await getCalendarPermissions('cal123');
+
+      expect(graphRequest).toHaveBeenCalledWith('/me/calendars/cal123/calendarPermissions');
     });
   });
 });

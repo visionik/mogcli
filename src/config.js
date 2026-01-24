@@ -27,6 +27,8 @@ export const SCOPES = [
   // OneDrive / Files
   'Files.ReadWrite.All',
   // Contacts / People
-  'Contacts.Read',
+  'Contacts.ReadWrite',
   'People.Read',
+  // OneNote
+  'Notes.ReadWrite',
 ];

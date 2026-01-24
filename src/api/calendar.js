@@ -149,3 +149,42 @@ export async function respondToEvent(eventId, response, comment, calendarId) {
     body: JSON.stringify(body),
   });
 }
+
+/**
+ * Get free/busy schedule for users
+ * @param {string[]} emails - Array of email addresses to check
+ * @param {string} startTime - Start time in ISO format
+ * @param {string} endTime - End time in ISO format
+ */
+export async function getFreeBusy(emails, startTime, endTime) {
+  const body = {
+    schedules: emails,
+    startTime: {
+      dateTime: startTime,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+    endTime: {
+      dateTime: endTime,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+  };
+
+  return graphRequest('/me/calendar/getSchedule', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Get calendar permissions (ACL)
+ * @param {string} calendarId - Calendar ID (optional, defaults to primary)
+ */
+export async function getCalendarPermissions(calendarId) {
+  let endpoint = '/me/calendar/calendarPermissions';
+  if (calendarId && calendarId !== 'primary') {
+    endpoint = `/me/calendars/${calendarId}/calendarPermissions`;
+  }
+  
+  const data = await graphRequest(endpoint);
+  return data.value;
+}

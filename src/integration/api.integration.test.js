@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { getValidToken } from '../auth.js';
+import { getValidAccessToken } from '../auth.js';
 
 // Skip all tests unless integration mode is enabled
 const SKIP = !process.env.MOG_INTEGRATION_TESTS;
@@ -34,7 +34,7 @@ const cleanup = {
 describe.skipIf(SKIP)('Integration Tests', () => {
   beforeAll(async () => {
     // Verify we have valid auth
-    const token = await getValidToken();
+    const token = await getValidAccessToken();
     if (!token) {
       throw new Error('No valid token. Run: mog auth login --client-id YOUR_CLIENT_ID');
     }

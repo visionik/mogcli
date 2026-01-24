@@ -6,6 +6,7 @@ import {
   createContact,
   updateContact,
   deleteContact,
+  searchDirectory,
 } from '../api/contacts.js';
 import { formatId, resolveId } from '../ids.js';
 
@@ -240,6 +241,63 @@ export async function contactsDelete(contactId, options) {
 
     console.log(chalk.green('✓ Contact deleted'));
   } catch (error) {
+    console.error(chalk.red('Error:'), error.message);
+    process.exit(1);
+  }
+}
+
+export async function contactsDirectory(query, options) {
+  try {
+    const users = await searchDirectory(query, { max: parseInt(options.max) });
+
+    if (options.json) {
+      console.log(JSON.stringify(users, null, 2));
+      return;
+    }
+
+    if (users.length === 0) {
+      console.log(chalk.yellow('No users found in directory'));
+      return;
+    }
+
+    console.log(chalk.bold(`Directory search for "${query}"`));
+    console.log('');
+
+    for (const user of users) {
+      const name = user.displayName || 'Unknown';
+      const email = user.mail || user.userPrincipalName || '';
+      
+      console.log(`  ${chalk.cyan(name)}`);
+      if (email) {
+        console.log(`    Email: ${chalk.dim(email)}`);
+      }
+      if (user.jobTitle) {
+        console.log(`    Title: ${chalk.dim(user.jobTitle)}`);
+      }
+      if (user.department) {
+        console.log(`    Dept: ${chalk.dim(user.department)}`);
+      }
+      if (user.officeLocation) {
+        console.log(`    Office: ${chalk.dim(user.officeLocation)}`);
+      }
+      if (user.id) {
+        console.log(`    ID: ${chalk.dim(formatId(user.id))}`);
+      }
+      if (options.verbose && user.id) {
+        console.log(`    Full: ${chalk.dim(user.id)}`);
+      }
+      console.log('');
+    }
+
+    console.log(chalk.dim(`${users.length} user(s) found`));
+  } catch (error) {
+    // Handle permission errors gracefully
+    if (error.message?.includes('Authorization') || error.message?.includes('Forbidden') || error.message?.includes('Access')) {
+      console.error(chalk.red('Error: Insufficient permissions'));
+      console.log(chalk.dim('Directory search requires User.Read.All permission.'));
+      console.log(chalk.dim('This may not be available for personal Microsoft accounts.'));
+      process.exit(1);
+    }
     console.error(chalk.red('Error:'), error.message);
     process.exit(1);
   }

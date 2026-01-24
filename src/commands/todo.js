@@ -8,6 +8,7 @@ import {
   completeTask,
   uncompleteTask,
   deleteTask,
+  clearCompletedTasks,
 } from '../api/todo.js';
 import { formatId, resolveId } from '../ids.js';
 
@@ -438,6 +439,34 @@ export async function removeTask(taskId, options) {
 
     console.log(chalk.green('✓ Task deleted'));
     console.log(`  ${chalk.dim(taskTitle)}`);
+  } catch (error) {
+    console.error(chalk.red('Error:'), error.message);
+    process.exit(1);
+  }
+}
+
+// ============ Clear Completed ============
+
+export async function clearCompleted(listIdOrName, options) {
+  try {
+    const { listId, listName } = await resolveListId(listIdOrName);
+
+    const cleared = await clearCompletedTasks(listId);
+
+    if (options.json) {
+      console.log(JSON.stringify({ success: true, cleared: cleared.length, tasks: cleared }));
+      return;
+    }
+
+    if (cleared.length === 0) {
+      console.log(chalk.yellow(`No completed tasks to clear in "${listName}"`));
+      return;
+    }
+
+    console.log(chalk.green(`✓ Cleared ${cleared.length} completed task(s) from "${listName}"`));
+    for (const task of cleared) {
+      console.log(`  ${chalk.dim('○')} ${chalk.strikethrough.dim(task.title)}`);
+    }
   } catch (error) {
     console.error(chalk.red('Error:'), error.message);
     process.exit(1);

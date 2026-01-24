@@ -1,44 +1,97 @@
-# mog — Microsoft Graph CLI
+# 📊 mog — Microsoft Ops Gadget
 
-A command-line interface for Microsoft 365: Mail, Calendar, OneDrive, To-Do, and Contacts.
+> **CLI for Microsoft 365** — Mail, Calendar, Drive, Contacts, Tasks, Word, PowerPoint, Excel, OneNote
 
-Modeled after [gog](https://github.com/slashbaseide/gog) for consistent patterns across Google and Microsoft CLIs.
+[![npm version](https://img.shields.io/npm/v/mogcli.svg)](https://www.npmjs.com/package/mogcli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-526%20passing-brightgreen.svg)](#)
 
-## Features
+The **Microsoft** counterpart to [gog](https://github.com/visionik/gog) (Google Ops Gadget). Same patterns, different cloud.
 
-- **Mail** — Search, send, drafts, attachments, folders
-- **Calendar** — Events, create, update, delete, respond to invites
-- **OneDrive** — List, search, upload, download, move, rename, copy
-- **To-Do** — Tasks, lists, add, update, complete, undo
-- **Contacts** — List, search, create, update, delete
+---
+
+## ✨ Features
+
+| Module | Description |
+|--------|-------------|
+| 📧 **Mail** | Search, send, drafts, attachments, folders |
+| 📅 **Calendar** | Events, create, respond, freebusy, ACL |
+| 📁 **Drive** | OneDrive files — list, upload, download, move |
+| 👥 **Contacts** | Personal contacts + org directory lookup |
+| ✅ **Tasks** | Microsoft To-Do — lists, add, complete, clear |
+| 📝 **Word** | Documents — list, export, copy |
+| 📊 **PowerPoint** | Presentations — list, export, copy |
+| 📈 **Excel** | Spreadsheets — read, write, tables, export |
+| 📓 **OneNote** | Notebooks, sections, pages, search |
 
 **Extras:**
-- **Slug system** — 8-character shorthand for Microsoft's long GUIDs
-- **AI-friendly** — `--ai-help` outputs comprehensive documentation for LLMs
-- **gog-compatible** — Same flags and patterns where applicable
+- 🔗 **Slug system** — 8-char shorthand for Microsoft's long GUIDs
+- 🤖 **AI-friendly** — `--ai-help` outputs comprehensive docs for LLMs
+- 🔄 **gog-compatible** — Same flags and patterns for muscle memory
 
-## Installation
+---
+
+## 🚀 Quick Start
 
 ```bash
-# Clone the repo
+# Install
+npm install -g mogcli
+
+# Authenticate (see Setup below for Azure AD app)
+mog auth login --client-id YOUR_CLIENT_ID
+
+# Check mail
+mog mail search "*" --max 10
+
+# Send email
+mog mail send --to bob@example.com --subject "Hello" --body "Hi Bob!"
+
+# List calendar events
+mog calendar list
+
+# Create event with attendees
+mog calendar create --summary "Meeting" \
+  --from 2025-01-15T10:00:00 --to 2025-01-15T11:00:00 \
+  --attendees "alice@example.com"
+
+# Upload to OneDrive
+mog drive upload ./report.pdf
+
+# Add a task
+mog tasks add "Review PR" --due tomorrow --important
+
+# Read Excel spreadsheet
+mog excel get myworkbook.xlsx Sheet1 A1:D10
+
+# Search OneNote
+mog onenote search "meeting notes"
+```
+
+---
+
+## 📦 Installation
+
+```bash
+# NPM (recommended)
+npm install -g mogcli
+
+# Or clone for development
 git clone https://github.com/visionik/mogcli.git
 cd mogcli
-
-# Install dependencies
 npm install
-
-# Link globally
 npm link
 ```
 
-## Setup
+---
 
-### 1. Create an Azure AD App
+## ⚙️ Setup — Azure AD App
+
+### 1. Create App Registration
 
 1. Go to [Azure Portal](https://portal.azure.com) → **App registrations** → **New registration**
-2. Name: `mog CLI` (or any name)
-3. Supported account types: Select based on your needs
-4. Redirect URI: Leave blank (uses device code flow)
+2. **Name:** `mog CLI` (or any name)
+3. **Supported account types:** Select based on your needs
+4. **Redirect URI:** Leave blank (uses device code flow)
 
 ### 2. Add API Permissions
 
@@ -56,6 +109,7 @@ Add these **Delegated** permissions:
 | `Contacts.ReadWrite` | Full contacts access |
 | `People.Read` | Read people |
 | `Tasks.ReadWrite` | Read and write tasks |
+| `Notes.ReadWrite` | Read and write OneNote |
 
 ### 3. Authenticate
 
@@ -63,7 +117,7 @@ Add these **Delegated** permissions:
 mog auth login --client-id YOUR_CLIENT_ID
 ```
 
-This opens a browser for Microsoft login. Tokens are stored at `~/.config/mog/tokens.json`.
+Opens a browser for Microsoft login. Tokens stored at `~/.config/mog/tokens.json`.
 
 ### 4. Verify
 
@@ -71,137 +125,252 @@ This opens a browser for Microsoft login. Tokens are stored at `~/.config/mog/to
 mog auth status
 ```
 
-## Usage
+---
+
+## 📖 Command Reference
 
 ### Global Options
 
-```
---json       Output JSON (best for scripting)
---plain      Stable text output (TSV, no colors)
---verbose    Show full IDs and extra details
---force      Skip confirmations
---no-input   Never prompt (CI mode)
---ai-help    Comprehensive docs for LLMs
-```
+| Option | Description |
+|--------|-------------|
+| `--json` | Output JSON (best for scripting) |
+| `--plain` | Stable text output (TSV, no colors) |
+| `--verbose` | Show full IDs and extra details |
+| `--force` | Skip confirmations |
+| `--no-input` | Never prompt (CI mode) |
+| `--ai-help` | Full docs for AI agents |
 
-### Mail
+---
+
+### 📧 Mail
 
 ```bash
-mog mail search "from:someone"          # Search messages
-mog mail search "*" --max 10            # Recent messages
-mog mail get <id>                       # Read a message
-mog mail send --to a@b.com --subject "Hi" --body "Hello"
-mog mail folders                        # List folders
+mog mail search <query>              # Search messages
+mog mail search "*" --max 10         # Recent messages
+mog mail get <id>                    # Read a message
+mog mail send --to X --subject Y --body Z
+mog mail folders                     # List folders
 
 # Drafts
 mog mail drafts list
-mog mail drafts create --to a@b.com --subject "Draft" --body "..."
+mog mail drafts create --to X --subject Y --body Z
 mog mail drafts send <draftId>
-mog mail drafts delete <draftId>
 
 # Attachments
 mog mail attachment list <messageId>
 mog mail attachment download <messageId> <attachmentId> --out ./file.pdf
 ```
 
-### Calendar
+---
+
+### 📅 Calendar
 
 ```bash
-mog cal list                            # Upcoming events
-mog cal list --from 2025-01-01 --to 2025-01-31
-mog cal calendars                       # List calendars
+mog calendar list                    # Upcoming events
+mog calendar list --from 2025-01-01 --to 2025-01-31
+mog calendar calendars               # List calendars
 
-mog cal create --summary "Meeting" \
+mog calendar create --summary "Meeting" \
   --from 2025-01-15T10:00:00 \
   --to 2025-01-15T11:00:00
 
-mog cal update <eventId> --summary "New Title"
-mog cal get <eventId>
-mog cal delete <eventId>
+mog calendar get <eventId>
+mog calendar update <eventId> --summary "New Title"
+mog calendar delete <eventId>
 
 # Respond to invites
-mog cal respond <eventId> accept
-mog cal respond <eventId> decline --comment "Can't make it"
-mog cal respond <eventId> tentative
+mog calendar respond <eventId> accept
+mog calendar respond <eventId> decline --comment "Can't make it"
+
+# Check availability
+mog calendar freebusy alice@example.com bob@example.com \
+  --start 2025-01-15T09:00:00 --end 2025-01-15T17:00:00
+
+# View permissions
+mog calendar acl
 ```
 
-### OneDrive
+**Alias:** `mog cal` → `mog calendar`
+
+---
+
+### 📁 Drive (OneDrive)
 
 ```bash
-mog drive ls                            # Root folder
-mog drive ls /Documents                 # Specific path
-mog drive search "report"               # Search files
-mog drive get <itemId>                  # File metadata
+mog drive ls                         # Root folder
+mog drive ls /Documents              # Specific path
+mog drive search "report"            # Search files
 
-mog drive download <itemId> --out ./file.pdf
+mog drive download <id> --out ./file.pdf
 mog drive upload ./doc.pdf
 mog drive upload ./doc.pdf --folder <folderId> --name "renamed.pdf"
 
 mog drive mkdir "New Folder"
-mog drive move <itemId> <destinationId>
-mog drive rename <itemId> "new-name.pdf"
-mog drive copy <itemId> --name "copy.pdf"
-mog drive rm <itemId>
+mog drive move <id> <destinationId>
+mog drive rename <id> "new-name.pdf"
+mog drive copy <id> --name "copy.pdf"
+mog drive rm <id>
 ```
 
-### To-Do
+---
+
+### ✅ Tasks (Microsoft To-Do)
 
 ```bash
-mog todo lists                          # List task lists
-mog todo list                           # Tasks in default list
-mog todo list <listId>                  # Tasks in specific list
-mog todo list --all                     # Include completed
+mog tasks lists                      # List task lists
+mog tasks list                       # Tasks in default list
+mog tasks list <listId>              # Tasks in specific list
+mog tasks list --all                 # Include completed
 
-mog todo add "Buy milk"
-mog todo add "Call mom" --due tomorrow --notes "Birthday planning"
-mog todo add "Review PR" --list Work --due monday --important
+mog tasks add "Buy milk"
+mog tasks add "Call mom" --due tomorrow --notes "Birthday"
+mog tasks add "Review PR" --list Work --due monday --important
 
-mog todo update <taskId> --title "New title" --due friday
-mog todo done <taskId>
-mog todo undo <taskId>
-mog todo delete <taskId>
+mog tasks done <taskId>
+mog tasks undo <taskId>
+mog tasks delete <taskId>
+mog tasks clear                      # Clear completed tasks
+mog tasks clear <listId>             # Clear from specific list
 ```
 
-### Contacts
+**Alias:** `mog todo` → `mog tasks`
+
+---
+
+### 👥 Contacts
 
 ```bash
 mog contacts list
 mog contacts search "john"
-mog contacts get <contactId>
+mog contacts get <id>
 
-mog contacts create --name "John Doe" --email "john@example.com" --phone "555-1234"
-mog contacts update <contactId> --email "new@example.com"
-mog contacts delete <contactId>
+mog contacts create --name "John Doe" --email "john@example.com"
+mog contacts update <id> --email "new@example.com"
+mog contacts delete <id>
+
+mog contacts directory "john"        # Org directory lookup
 ```
 
-## Slugs
+---
 
-Microsoft Graph uses very long GUIDs. mog generates 8-character slugs for convenience:
+### 📈 Excel
+
+```bash
+mog excel list                       # List workbooks
+mog excel metadata <id>              # List worksheets
+
+# Read data
+mog excel get <id>                   # First sheet, used range
+mog excel get <id> Sheet1 A1:D10     # Specific range
+
+# Write data (positional values fill row by row)
+mog excel update <id> Sheet1 A1:B2 val1 val2 val3 val4
+
+# Append to table
+mog excel append <id> TableName col1 col2 col3
+
+# Create & manage
+mog excel create "Budget 2025"
+mog excel add-sheet <id> --name "Q2"
+mog excel tables <id>
+mog excel clear <id> Sheet1 A1:C10   # Clear values (keep formatting)
+mog excel copy <id> "Budget Copy"
+
+# Export
+mog excel export <id> --out ./data.xlsx
+mog excel export <id> --format csv --out ./data.csv
+```
+
+---
+
+### 📓 OneNote
+
+```bash
+mog onenote notebooks                # List notebooks
+mog onenote sections <notebookId>    # List sections
+mog onenote pages <sectionId>        # List pages
+mog onenote get <pageId>             # Get page content (text)
+mog onenote get <pageId> --html      # Get raw HTML
+
+mog onenote create-notebook "Work Notes"
+mog onenote create-section <notebookId> "January"
+mog onenote create-page <sectionId> "Meeting Notes" "Content here"
+
+mog onenote delete <pageId>
+mog onenote search "meeting"
+```
+
+---
+
+### 📝 Word
+
+```bash
+mog word list                        # List documents
+mog word export <id> --out ./doc.docx
+mog word export <id> --format pdf --out ./doc.pdf
+mog word copy <id> "Copy of Report"
+```
+
+---
+
+### 📊 PowerPoint
+
+```bash
+mog ppt list                         # List presentations
+mog ppt export <id> --out ./deck.pptx
+mog ppt export <id> --format pdf --out ./deck.pdf
+mog ppt copy <id> "Copy of Deck"
+```
+
+---
+
+## 🔗 Slug System
+
+Microsoft Graph uses very long GUIDs (100+ characters). mog generates 8-character slugs:
 
 ```
-Full:  AQMkADAwATMzAGZmAS04MDViLTRiNzgt...
+Full:  AQMkADAwATMzAGZmAS04MDViLTRiNzgtMDA...
 Slug:  a3f2c891
 ```
 
-- All commands output slugs by default
-- All commands accept either slugs or full IDs
-- Use `--verbose` to also see full IDs
-- Slugs are cached in `~/.config/mog/slugs.json`
-- `mog auth logout` clears the cache
+- ✅ All commands output slugs by default
+- ✅ All commands accept slugs or full IDs
+- ✅ Use `--verbose` to also see full IDs
+- ✅ Slugs cached in `~/.config/mog/slugs.json`
+- ✅ `mog auth logout` clears the cache
 
-## For AI Agents
+---
 
-Run `mog --ai-help` for comprehensive, machine-readable documentation including:
+## 🤖 AI-Friendly
 
-- All commands and options
+Run `mog --ai-help` for comprehensive documentation including:
+
+- All commands with options
 - Date/time format specifications
 - Positive and negative examples
 - Exit codes and piping patterns
 - Troubleshooting guide
 
-This follows the [dashdash](https://github.com/visionik/dashdash) specification.
+Follows the [dashdash](https://github.com/visionik/dashdash) specification.
 
-## Configuration
+---
+
+## 🔄 gog Compatibility
+
+mog follows [gog](https://github.com/visionik/gog) patterns for muscle memory across clouds:
+
+| Pattern | mog | gog |
+|---------|-----|-----|
+| Calendar events | `--summary`, `--from`, `--to` | Same |
+| Task notes | `--notes` | Same |
+| Output format | `--json`, `--plain` | Same |
+| Max results | `--max` | Same |
+| Excel read | `mog excel get <id> Sheet1 A1:D10` | `gog sheets get <id> Sheet1!A1:D10` |
+| Spreadsheet write | `mog excel update <id> ...` | `gog sheets update <id> ...` |
+
+---
+
+## 🗂️ Configuration
 
 | File | Purpose |
 |------|---------|
@@ -209,31 +378,26 @@ This follows the [dashdash](https://github.com/visionik/dashdash) specification.
 | `~/.config/mog/settings.json` | Client ID and settings |
 | `~/.config/mog/slugs.json` | ID-to-slug cache |
 
-## Environment Variables
+**Environment Variables:**
 
 | Variable | Description |
 |----------|-------------|
 | `MOG_CLIENT_ID` | Azure AD client ID (alternative to --client-id) |
 
-## Development
+---
+
+## 🛠️ Development
 
 ```bash
-# Run tests
-npm test
-
-# Run tests with coverage
-npm run test:coverage
-
-# Lint
-npm run lint
-
-# Format
-npm run fmt
-
-# All checks
-npm run check
+npm test              # Run tests (526 passing)
+npm run test:coverage # With coverage
+npm run lint          # Lint
+npm run fmt           # Format
+npm run check         # All checks
 ```
 
-## License
+---
+
+## 📄 License
 
 MIT

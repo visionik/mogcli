@@ -1,7 +1,7 @@
 {
-  "name": "mog",
-  "version": "1.0.0",
-  "description": "Microsoft Graph CLI - Mail, Calendar, Drive, To-Do, Contacts",
+  "name": "mogcli",
+  "version": "0.2.0",
+  "description": "Microsoft Ops Gadget - CLI for Microsoft 365",
   "main": "src/index.js",
   "bin": {
     "mog": "./bin/mog.js"
@@ -19,11 +19,16 @@
   },
   "keywords": [
     "microsoft",
+    "microsoft365",
     "graph",
     "outlook",
     "onedrive",
     "calendar",
     "todo",
+    "excel",
+    "onenote",
+    "word",
+    "powerpoint",
     "cli"
   ],
   "author": "visionik",

@@ -10,6 +10,7 @@ import {
   markComplete,
   markUncomplete,
   removeTask,
+  clearCompleted,
 } from '../src/commands/todo.js';
 import {
   mailSearch,
@@ -31,6 +32,8 @@ import {
   calDelete,
   calCalendars,
   calRespond,
+  calFreeBusy,
+  calAcl,
 } from '../src/commands/cal.js';
 import {
   driveLs,
@@ -51,9 +54,34 @@ import {
   contactsCreate,
   contactsUpdate,
   contactsDelete,
+  contactsDirectory,
 } from '../src/commands/contacts.js';
 import { wordList, wordGet, wordExport, wordCopy, wordCreate } from '../src/commands/word.js';
 import { pptList, pptGet, pptExport, pptCopy, pptCreate } from '../src/commands/ppt.js';
+import {
+  excelList,
+  excelMetadata,
+  excelGet,
+  excelUpdate,
+  excelAppend,
+  excelCreate,
+  excelAddSheet,
+  excelTables,
+  excelExport,
+  excelClear,
+  excelCopy,
+} from '../src/commands/excel.js';
+import {
+  onenoteNotebooks,
+  onenoteSections,
+  onenotePages,
+  onenoteGet,
+  onenoteCreateNotebook,
+  onenoteCreateSection,
+  onenoteCreatePage,
+  onenoteDelete,
+  onenoteSearch,
+} from '../src/commands/onenote.js';
 import { printAiHelp } from '../src/ai-help.js';
 
 // Handle --ai-help before commander parses (eager processing)
@@ -190,7 +218,7 @@ attachment
   .action(withGlobalOpts(attachmentDownload));
 
 // ============ Calendar ============
-const cal = program.command('cal').alias('calendar').description('Outlook calendar');
+const cal = program.command('calendar').alias('cal').description('Outlook calendar');
 
 cal
   .command('list')
@@ -247,6 +275,21 @@ cal
   .action(withGlobalOpts(calRespond));
 
 cal.command('calendars').description('List calendars').action(withGlobalOpts(calCalendars));
+
+cal
+  .command('freebusy <emails...>')
+  .description('Check availability for users')
+  .option('--start <datetime>', 'Start time (ISO format)')
+  .option('--end <datetime>', 'End time (ISO format)')
+  .action((emails, cmd) => {
+    const opts = { ...program.opts(), ...cmd.opts() };
+    return calFreeBusy(emails, opts);
+  });
+
+cal
+  .command('acl [calendarId]')
+  .description('List calendar permissions (access control list)')
+  .action(withGlobalOpts(calAcl));
 
 // ============ Drive (OneDrive) ============
 const drive = program.command('drive').description('OneDrive files');
@@ -358,6 +401,12 @@ contacts
   .description('Delete a contact')
   .action(withGlobalOpts(contactsDelete));
 
+contacts
+  .command('directory <query>')
+  .description('Search organizational directory (requires User.Read.All permission)')
+  .option('--max <n>', 'Maximum results', '25')
+  .action(withGlobalOpts(contactsDirectory));
+
 // ============ Word (Docs) ============
 const word = program.command('word').alias('docs').description('Word documents');
 
@@ -422,8 +471,148 @@ ppt
   .option('--folder <folderId>', 'Destination folder ID')
   .action(withGlobalOpts(pptCreate));
 
-// ============ To-Do (Tasks) ============
-const todo = program.command('todo').alias('tasks').description('Microsoft To-Do tasks');
+// ============ Excel (Spreadsheets) ============
+const excel = program.command('excel').alias('sheets').description('Excel spreadsheets');
+
+excel
+  .command('list')
+  .description('List Excel workbooks in OneDrive')
+  .option('--max <n>', 'Maximum results', '50')
+  .action(withGlobalOpts(excelList));
+
+excel
+  .command('metadata <workbookId>')
+  .description('List worksheets in a workbook')
+  .action(withGlobalOpts(excelMetadata));
+
+excel
+  .command('get <workbookId> [sheet] [range]')
+  .description('Read cells from a worksheet (default: used range of first sheet)')
+  .action(withGlobalOpts(excelGet));
+
+excel
+  .command('update <workbookId> <sheet> <range> <values...>')
+  .description('Write values to a cell range (values fill row by row)')
+  .action((workbookId, sheet, range, values, cmd) => {
+    const opts = { ...program.opts(), ...cmd.opts() };
+    return excelUpdate(workbookId, sheet, range, values, opts);
+  });
+
+excel
+  .command('append <workbookId> <table> <values...>')
+  .description('Append a row to a table')
+  .action((workbookId, table, values, cmd) => {
+    const opts = { ...program.opts(), ...cmd.opts() };
+    return excelAppend(workbookId, table, values, opts);
+  });
+
+excel
+  .command('create <title>')
+  .description('Create a new Excel workbook')
+  .option('--folder <folderId>', 'Destination folder ID')
+  .action((title, cmd) => {
+    const opts = { ...program.opts(), ...cmd.opts() };
+    return excelCreate(title, opts);
+  });
+
+excel
+  .command('add-sheet <workbookId>')
+  .description('Add a new worksheet to a workbook')
+  .option('--name <name>', 'Worksheet name')
+  .action(withGlobalOpts(excelAddSheet));
+
+excel
+  .command('tables <workbookId>')
+  .description('List tables in a workbook')
+  .action(withGlobalOpts(excelTables));
+
+excel
+  .command('clear <workbookId> <sheet> <range>')
+  .description('Clear values in a range (keeps formatting)')
+  .action(withGlobalOpts(excelClear));
+
+excel
+  .command('copy <workbookId> <title>')
+  .description('Copy/duplicate a workbook')
+  .option('--folder <folderId>', 'Destination folder ID')
+  .action((workbookId, title, cmd) => {
+    const opts = { ...program.opts(), ...cmd.opts() };
+    return excelCopy(workbookId, title, opts);
+  });
+
+excel
+  .command('export <workbookId>')
+  .description('Export a workbook')
+  .requiredOption('--out <path>', 'Output file path')
+  .option('--format <format>', 'Export format: xlsx, csv', 'xlsx')
+  .option('--sheet <name>', 'Sheet name for CSV export (default: first sheet)')
+  .action(withGlobalOpts(excelExport));
+
+// ============ OneNote ============
+const onenote = program.command('onenote').alias('notes').description('OneNote notebooks');
+
+onenote
+  .command('notebooks')
+  .description('List all notebooks')
+  .option('--max <n>', 'Maximum results', '50')
+  .action(withGlobalOpts(onenoteNotebooks));
+
+onenote
+  .command('sections <notebookId>')
+  .description('List sections in a notebook')
+  .option('--max <n>', 'Maximum results', '50')
+  .action(withGlobalOpts(onenoteSections));
+
+onenote
+  .command('pages <sectionId>')
+  .description('List pages in a section')
+  .option('--max <n>', 'Maximum results', '50')
+  .action(withGlobalOpts(onenotePages));
+
+onenote
+  .command('get <pageId>')
+  .description('Get page content (as text)')
+  .option('--html', 'Output raw HTML instead of text')
+  .action(withGlobalOpts(onenoteGet));
+
+onenote
+  .command('create-notebook <name>')
+  .description('Create a new notebook')
+  .action((name, cmd) => {
+    const opts = { ...program.opts(), ...cmd.opts() };
+    return onenoteCreateNotebook(name, opts);
+  });
+
+onenote
+  .command('create-section <notebookId> <name>')
+  .description('Create a new section in a notebook')
+  .action((notebookId, name, cmd) => {
+    const opts = { ...program.opts(), ...cmd.opts() };
+    return onenoteCreateSection(notebookId, name, opts);
+  });
+
+onenote
+  .command('create-page <sectionId> <title> [content]')
+  .description('Create a new page in a section')
+  .action((sectionId, title, content, cmd) => {
+    const opts = { ...program.opts(), ...cmd.opts() };
+    return onenoteCreatePage(sectionId, title, content, opts);
+  });
+
+onenote
+  .command('delete <pageId>')
+  .alias('rm')
+  .description('Delete a page')
+  .action(withGlobalOpts(onenoteDelete));
+
+onenote
+  .command('search <query>')
+  .description('Search across all notes')
+  .option('--max <n>', 'Maximum results', '25')
+  .action(withGlobalOpts(onenoteSearch));
+
+// ============ Tasks (To-Do) ============
+const todo = program.command('tasks').alias('todo').description('Microsoft To-Do tasks');
 
 todo.command('lists').description('List all task lists').action(withGlobalOpts(listLists));
 
@@ -476,5 +665,10 @@ todo
   .description('Delete a task')
   .option('--list <name>', 'Task list name')
   .action(withGlobalOpts(removeTask));
+
+todo
+  .command('clear [listId]')
+  .description('Clear completed tasks from a list')
+  .action(withGlobalOpts(clearCompleted));
 
 program.parse();

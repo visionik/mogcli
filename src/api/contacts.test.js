@@ -13,6 +13,7 @@ import {
   createContact,
   updateContact,
   deleteContact,
+  searchDirectory,
 } from './contacts.js';
 
 describe('contacts API', () => {
@@ -211,6 +212,40 @@ describe('contacts API', () => {
         '/me/contacts/contact1',
         expect.objectContaining({ method: 'DELETE' })
       );
+    });
+  });
+
+  describe('searchDirectory', () => {
+    it('searches organizational directory', async () => {
+      const mockUsers = [
+        { id: 'user1', displayName: 'John Doe', mail: 'john@example.com' },
+        { id: 'user2', displayName: 'John Smith', mail: 'jsmith@example.com' },
+      ];
+      graphRequest.mockResolvedValue({ value: mockUsers });
+
+      const result = await searchDirectory('John');
+
+      expect(graphRequest).toHaveBeenCalledWith(expect.stringContaining('/users?'));
+      expect(graphRequest).toHaveBeenCalledWith(expect.stringContaining('John'));
+      expect(result).toEqual(mockUsers);
+    });
+
+    it('applies max limit', async () => {
+      graphRequest.mockResolvedValue({ value: [] });
+
+      await searchDirectory('Test', { max: 10 });
+
+      expect(graphRequest).toHaveBeenCalledWith(expect.stringContaining('%24top=10'));
+    });
+
+    it('includes relevant user fields in select', async () => {
+      graphRequest.mockResolvedValue({ value: [] });
+
+      await searchDirectory('Test');
+
+      expect(graphRequest).toHaveBeenCalledWith(expect.stringContaining('displayName'));
+      expect(graphRequest).toHaveBeenCalledWith(expect.stringContaining('mail'));
+      expect(graphRequest).toHaveBeenCalledWith(expect.stringContaining('jobTitle'));
     });
   });
 });

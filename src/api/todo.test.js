@@ -16,6 +16,8 @@ import {
   completeTask,
   uncompleteTask,
   deleteTask,
+  getCompletedTasks,
+  clearCompletedTasks,
 } from './todo.js';
 
 describe('todo API', () => {
@@ -222,6 +224,49 @@ describe('todo API', () => {
         '/me/todo/lists/list1/tasks/task1',
         expect.objectContaining({ method: 'DELETE' })
       );
+    });
+  });
+
+  describe('getCompletedTasks', () => {
+    it('fetches completed tasks with filter', async () => {
+      const mockTasks = [
+        { id: 'task1', title: 'Done task', status: 'completed' },
+      ];
+      graphRequest.mockResolvedValue({ value: mockTasks });
+
+      const result = await getCompletedTasks('list1');
+
+      expect(graphRequest).toHaveBeenCalledWith(
+        expect.stringContaining("status eq 'completed'")
+      );
+      expect(result).toEqual(mockTasks);
+    });
+  });
+
+  describe('clearCompletedTasks', () => {
+    it('deletes all completed tasks', async () => {
+      const mockTasks = [
+        { id: 'task1', title: 'Done 1', status: 'completed' },
+        { id: 'task2', title: 'Done 2', status: 'completed' },
+      ];
+      graphRequest
+        .mockResolvedValueOnce({ value: mockTasks }) // getCompletedTasks
+        .mockResolvedValueOnce(undefined) // deleteTask 1
+        .mockResolvedValueOnce(undefined); // deleteTask 2
+
+      const result = await clearCompletedTasks('list1');
+
+      expect(result).toHaveLength(2);
+      expect(graphRequest).toHaveBeenCalledTimes(3);
+    });
+
+    it('returns empty array when no completed tasks', async () => {
+      graphRequest.mockResolvedValue({ value: [] });
+
+      const result = await clearCompletedTasks('list1');
+
+      expect(result).toHaveLength(0);
+      expect(graphRequest).toHaveBeenCalledTimes(1);
     });
   });
 });

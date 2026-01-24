@@ -158,3 +158,19 @@ export async function deleteContact(contactId) {
     method: 'DELETE',
   });
 }
+
+/**
+ * Search organizational directory
+ * Requires User.Read.All permission for full directory access
+ * @param {string} query - Search query
+ * @param {object} options - Search options
+ */
+export async function searchDirectory(query, options = {}) {
+  const params = new URLSearchParams();
+  params.append('$top', (options.max || 25).toString());
+  params.append('$filter', `startswith(displayName,'${query}') or startswith(mail,'${query}') or startswith(userPrincipalName,'${query}')`);
+  params.append('$select', 'id,displayName,mail,userPrincipalName,jobTitle,department,officeLocation');
+  
+  const data = await graphRequest(`/users?${params.toString()}`);
+  return data.value;
+}

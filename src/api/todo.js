@@ -105,3 +105,28 @@ export async function deleteTask(listId, taskId) {
     method: 'DELETE',
   });
 }
+
+/**
+ * Get completed tasks from a list
+ */
+export async function getCompletedTasks(listId) {
+  const data = await graphRequest(
+    `/me/todo/lists/${listId}/tasks?$filter=status eq 'completed'`
+  );
+  return data.value;
+}
+
+/**
+ * Clear completed tasks from a list (delete each one)
+ */
+export async function clearCompletedTasks(listId) {
+  const completedTasks = await getCompletedTasks(listId);
+  const results = [];
+  
+  for (const task of completedTasks) {
+    await deleteTask(listId, task.id);
+    results.push(task);
+  }
+  
+  return results;
+}

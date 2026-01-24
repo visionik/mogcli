@@ -14,20 +14,24 @@ mcp: none
 api: https://learn.microsoft.com/en-us/graph/api/overview
 ---
 
-# mog - Microsoft Graph CLI
+# mog — Microsoft Ops Gadget
 
-CLI for Microsoft 365: Mail, Calendar, OneDrive, To-Do, Contacts.
+CLI for Microsoft 365: Mail, Calendar, OneDrive, Contacts, Tasks, Word, PowerPoint, Excel, OneNote.
 
-Modeled after \`gog\` (Google Workspace CLI) for consistent patterns.
+The Microsoft counterpart to \`gog\` (Google Ops Gadget). Same patterns, different cloud.
 
 ## Overview
 
 mog provides command-line access to Microsoft 365 services via Microsoft Graph API:
 - **mail** - Outlook mail (search, send, folders)
-- **cal** - Outlook calendar (events, create, delete)
+- **calendar** - Outlook calendar (events, create, delete, freebusy, acl)
 - **drive** - OneDrive files (list, search, upload, download)
-- **todo** - Microsoft To-Do tasks (lists, add, complete)
-- **contacts** - People and contacts (list, search)
+- **excel** - Excel spreadsheets (read, write, tables)
+- **word** - Word documents (list, export, copy)
+- **ppt** - PowerPoint presentations (list, export, copy)
+- **onenote** - OneNote notebooks (notebooks, sections, pages, search)
+- **tasks** - Microsoft To-Do tasks (lists, add, complete, clear)
+- **contacts** - People and contacts (list, search, directory)
 
 ## Setup/Prerequisites
 
@@ -50,6 +54,7 @@ In your app registration, add these **Delegated** permissions:
 - \`Contacts.Read\` - Read contacts
 - \`People.Read\` - Read people
 - \`Tasks.ReadWrite\` - Read and write tasks
+- \`Notes.ReadWrite\` - Read and write OneNote notebooks
 
 ### 3. Authenticate
 
@@ -121,19 +126,21 @@ Slug:  a3f2c891
 
 | Command | Description |
 |---------|-------------|
-| \`mog cal list\` | List upcoming events |
-| \`mog cal create\` | Create an event |
-| \`mog cal get <eventId>\` | Get event details |
-| \`mog cal delete <eventId>\` | Delete an event |
-| \`mog cal calendars\` | List calendars |
+| \`mog calendar list\` | List upcoming events |
+| \`mog calendar create\` | Create an event |
+| \`mog calendar get <eventId>\` | Get event details |
+| \`mog calendar delete <eventId>\` | Delete an event |
+| \`mog calendar calendars\` | List calendars |
+| \`mog calendar freebusy <emails...>\` | Check availability for users |
+| \`mog calendar acl [calendarId]\` | List calendar permissions |
 
-**cal list options:**
+**calendar list options:**
 - \`--from <iso>\` - Start date (ISO format, or: today, tomorrow, monday)
 - \`--to <iso>\` - End date
 - \`--max <n>\` - Maximum results (default: 25)
 - \`--calendar <id>\` - Calendar ID or slug
 
-**cal create options:**
+**calendar create options:**
 - \`--summary <text>\` - Event title (required)
 - \`--from <iso>\` - Start time (required)
 - \`--to <iso>\` - End time (required)
@@ -141,6 +148,12 @@ Slug:  a3f2c891
 - \`--location <text>\` - Event location
 - \`--calendar <id>\` - Calendar ID
 - \`--attendees <emails>\` - Attendee emails (comma-separated)
+
+**calendar freebusy options:**
+- \`--start <iso>\` - Start time (default: now)
+- \`--end <iso>\` - End time (default: 24 hours from now)
+
+**Note:** Microsoft Graph does not expose a dedicated calendar colors API. Calendar colors are returned as part of calendar metadata via \`mog calendar calendars\`.
 
 ### Drive Commands
 
@@ -166,6 +179,81 @@ Slug:  a3f2c891
 **drive mkdir options:**
 - \`--parent <id>\` - Parent folder ID or slug
 
+### Excel Commands
+
+| Command | Description |
+|---------|-------------|
+| \`mog excel list\` | List Excel workbooks |
+| \`mog excel metadata <workbookId>\` | List worksheets in a workbook |
+| \`mog excel get <workbookId> [sheet] [range]\` | Read cells from a worksheet |
+| \`mog excel update <workbookId> <sheet> <range> <values...>\` | Write values to cells |
+| \`mog excel append <workbookId> <table> <values...>\` | Append a row to a table |
+| \`mog excel create <title>\` | Create a new workbook |
+| \`mog excel add-sheet <workbookId>\` | Add a worksheet |
+| \`mog excel tables <workbookId>\` | List tables in a workbook |
+| \`mog excel clear <workbookId> <sheet> <range>\` | Clear values in a range |
+| \`mog excel copy <workbookId> <title>\` | Copy/duplicate a workbook |
+| \`mog excel export <workbookId>\` | Export workbook as xlsx or csv |
+
+**excel list options:**
+- \`--max <n>\` - Maximum results (default: 50)
+
+**excel get:**
+- If only workbook given, reads used range of first sheet
+- If range looks like "A1:C3" without sheet, reads from first sheet
+- \`--json\` returns full range data
+
+**excel update:**
+- Values are positional and fill the range row by row
+- Example: \`mog excel update wb1 Sheet1 A1:B2 val1 val2 val3 val4\`
+
+**excel append:**
+- Values are positional and become a single row
+- Example: \`mog excel append wb1 TableName col1 col2 col3\`
+
+**excel create:**
+- Title is positional: \`mog excel create "My Workbook"\`
+- \`--folder <id>\` - Destination folder ID or slug
+
+**excel add-sheet options:**
+- \`--name <name>\` - Worksheet name (auto-generated if omitted)
+
+**excel clear:**
+- Clears values but keeps formatting
+- Example: \`mog excel clear wb1 Sheet1 A1:C10\`
+
+**excel copy:**
+- Title is positional: \`mog excel copy wb1 "Copy of Budget"\`
+- \`--folder <id>\` - Destination folder ID or slug
+
+**excel export options:**
+- \`--out <path>\` - Output file path (required)
+- \`--format <format>\` - Export format: xlsx, csv (default: xlsx)
+- \`--sheet <name>\` - Sheet name for CSV export (default: first sheet)
+
+### OneNote Commands
+
+| Command | Description |
+|---------|-------------|
+| \`mog onenote notebooks\` | List all notebooks |
+| \`mog onenote sections <notebookId>\` | List sections in a notebook |
+| \`mog onenote pages <sectionId>\` | List pages in a section |
+| \`mog onenote get <pageId>\` | Get page content (as text) |
+| \`mog onenote create-notebook <name>\` | Create a new notebook |
+| \`mog onenote create-section <notebookId> <name>\` | Create a section |
+| \`mog onenote create-page <sectionId> <title> [content]\` | Create a page |
+| \`mog onenote delete <pageId>\` | Delete a page |
+| \`mog onenote search <query>\` | Search across all notes |
+
+**onenote notebooks/sections/pages options:**
+- \`--max <n>\` - Maximum results (default: 50)
+
+**onenote get options:**
+- \`--html\` - Output raw HTML instead of text
+
+**onenote search options:**
+- \`--max <n>\` - Maximum results (default: 25)
+
 ### Contacts Commands
 
 | Command | Description |
@@ -173,30 +261,36 @@ Slug:  a3f2c891
 | \`mog contacts list\` | List contacts |
 | \`mog contacts search <query>\` | Search contacts |
 | \`mog contacts get <contactId>\` | Get contact details |
+| \`mog contacts directory <query>\` | Search organizational directory |
 
 **contacts list/search options:**
 - \`--max <n>\` - Maximum results (default: 50/25)
 
-### To-Do Commands
+**contacts directory options:**
+- \`--max <n>\` - Maximum results (default: 25)
+- Requires \`User.Read.All\` permission (may not work with personal accounts)
+
+### Tasks Commands
 
 | Command | Description |
 |---------|-------------|
-| \`mog todo lists\` | List all task lists |
-| \`mog todo list [listId]\` | List tasks in a list |
-| \`mog todo add <title>\` | Add a new task |
-| \`mog todo done <taskId>\` | Mark task complete |
-| \`mog todo delete <taskId>\` | Delete a task |
+| \`mog tasks lists\` | List all task lists |
+| \`mog tasks list [listId]\` | List tasks in a list |
+| \`mog tasks add <title>\` | Add a new task |
+| \`mog tasks done <taskId>\` | Mark task complete |
+| \`mog tasks delete <taskId>\` | Delete a task |
+| \`mog tasks clear [listId]\` | Clear completed tasks from a list |
 
-**todo list options:**
+**tasks list options:**
 - \`--all\` - Include completed tasks
 
-**todo add options:**
+**tasks add options:**
 - \`--list <name|id>\` - Task list name or ID/slug
 - \`--due <date>\` - Due date (see Date Formats below)
 - \`--notes <text>\` - Task notes
 - \`--important\` - Mark as important
 
-**todo done/delete options:**
+**tasks done/delete options:**
 - \`--list <name|id>\` - Task list name or ID/slug
 
 ## Date/Time Formats
@@ -270,20 +364,26 @@ mog mail send --to bob@example.com --subject "Re: Hello" --body "Thanks!" --repl
 
 \`\`\`bash
 # List upcoming events
-mog cal list
+mog calendar list
 
 # List events for date range
-mog cal list --from 2025-01-01 --to 2025-01-31
+mog calendar list --from 2025-01-01 --to 2025-01-31
 
 # Create an event
-mog cal create --summary "Team Meeting" --from 2025-01-15T10:00:00 --to 2025-01-15T11:00:00
+mog calendar create --summary "Team Meeting" --from 2025-01-15T10:00:00 --to 2025-01-15T11:00:00
 
 # Create with location and attendees
-mog cal create --summary "Lunch" --from 2025-01-15T12:00:00 --to 2025-01-15T13:00:00 \\
+mog calendar create --summary "Lunch" --from 2025-01-15T12:00:00 --to 2025-01-15T13:00:00 \\
   --location "Cafe" --attendees "alice@example.com,bob@example.com"
 
 # Delete an event
-mog cal delete a3f2c891
+mog calendar delete a3f2c891
+
+# Check availability for users
+mog calendar freebusy alice@example.com bob@example.com --start 2025-01-15T09:00:00 --end 2025-01-15T17:00:00
+
+# List calendar permissions
+mog calendar acl
 \`\`\`
 
 ### Drive
@@ -314,36 +414,140 @@ mog drive mkdir "New Folder"
 mog drive rm a3f2c891
 \`\`\`
 
-### To-Do
+### Tasks
 
 \`\`\`bash
 # List all task lists
-mog todo lists
+mog tasks lists
 
 # List tasks in default list
-mog todo list
+mog tasks list
 
 # List tasks in specific list (by slug or name)
-mog todo list b4c5984b
-mog todo list Shopping
+mog tasks list b4c5984b
+mog tasks list Shopping
 
 # Include completed tasks
-mog todo list --all
+mog tasks list --all
 
 # Add a task
-mog todo add "Buy milk"
+mog tasks add "Buy milk"
 
 # Add with due date
-mog todo add "Call mom" --due tomorrow
+mog tasks add "Call mom" --due tomorrow
 
 # Add to specific list with importance
-mog todo add "Review PR" --list Work --due monday --important
+mog tasks add "Review PR" --list Work --due monday --important
 
 # Complete a task
-mog todo done a3f2c891
+mog tasks done a3f2c891
 
 # Delete a task
-mog todo delete a3f2c891
+mog tasks delete a3f2c891
+
+# Clear completed tasks from default list
+mog tasks clear
+
+# Clear completed tasks from specific list
+mog tasks clear Shopping
+\`\`\`
+
+### Excel
+
+\`\`\`bash
+# List all Excel workbooks
+mog excel list
+
+# List worksheets in a workbook (metadata)
+mog excel metadata a3f2c891
+
+# Read used range of first sheet
+mog excel get a3f2c891
+
+# Read specific range
+mog excel get a3f2c891 Sheet1 A1:C10
+
+# Read entire sheet (used range)
+mog excel get a3f2c891 "Q1 Data"
+
+# Write values to cells (positional values fill row by row)
+mog excel update a3f2c891 Sheet1 A1:B2 1 2 3 4
+
+# Write strings
+mog excel update a3f2c891 Sheet1 A1:B1 Name Value
+
+# Append a row to a table (positional values)
+mog excel append a3f2c891 SalesData 100 "Product A" 2025-01-15
+
+# Create new workbook (positional title)
+mog excel create "Budget 2025"
+
+# Create in specific folder
+mog excel create "Report" --folder b2d4e6f8
+
+# Add a worksheet
+mog excel add-sheet a3f2c891 --name "Q2"
+
+# List tables
+mog excel tables a3f2c891
+
+# Clear values in a range (keeps formatting)
+mog excel clear a3f2c891 Sheet1 A1:C10
+
+# Copy/duplicate a workbook
+mog excel copy a3f2c891 "Budget 2025 Copy"
+
+# Copy to specific folder
+mog excel copy a3f2c891 "Backup" --folder b2d4e6f8
+
+# Export as XLSX
+mog excel export a3f2c891 --out ./workbook.xlsx
+
+# Export as CSV
+mog excel export a3f2c891 --format csv --out ./data.csv
+
+# Export specific sheet as CSV
+mog excel export a3f2c891 --format csv --sheet "Q1 Data" --out ./q1.csv
+\`\`\`
+
+### OneNote
+
+\`\`\`bash
+# List all notebooks
+mog onenote notebooks
+
+# List sections in a notebook
+mog onenote sections a3f2c891
+
+# List pages in a section
+mog onenote pages b4c5984b
+
+# Get page content (as readable text)
+mog onenote get c5d6e7f8
+
+# Get page content as raw HTML
+mog onenote get c5d6e7f8 --html
+
+# Create a new notebook
+mog onenote create-notebook "Work Notes"
+
+# Create a section in a notebook
+mog onenote create-section a3f2c891 "January"
+
+# Create a page in a section (with content)
+mog onenote create-page b4c5984b "Meeting Notes" "Notes from today's meeting"
+
+# Create a page (empty)
+mog onenote create-page b4c5984b "Quick Note"
+
+# Delete a page
+mog onenote delete c5d6e7f8
+
+# Search across all notebooks
+mog onenote search "meeting"
+
+# Search with max results
+mog onenote search "project" --max 10
 \`\`\`
 
 ### Contacts
@@ -357,6 +561,9 @@ mog contacts search "john"
 
 # Get contact details
 mog contacts get a3f2c891
+
+# Search organizational directory (requires User.Read.All permission)
+mog contacts directory "john"
 \`\`\`
 
 ## Troubleshooting
@@ -424,15 +631,30 @@ mog follows gog (Google Workspace CLI) patterns where applicable:
 |------|---------|
 | Search mail | \`mog mail search "query"\` |
 | Send email | \`mog mail send --to X --subject Y --body Z\` |
-| List events | \`mog cal list\` |
-| Create event | \`mog cal create --summary X --from Y --to Z\` |
+| List events | \`mog calendar list\` |
+| Create event | \`mog calendar create --summary X --from Y --to Z\` |
+| Check availability | \`mog calendar freebusy email1 email2 --start X --end Y\` |
+| Calendar permissions | \`mog calendar acl\` |
 | List files | \`mog drive ls\` |
 | Upload file | \`mog drive upload ./file.pdf\` |
 | Download file | \`mog drive download ID --out ./file.pdf\` |
-| List tasks | \`mog todo list\` |
-| Add task | \`mog todo add "title"\` |
-| Complete task | \`mog todo done ID\` |
+| List workbooks | \`mog excel list\` |
+| Read cells | \`mog excel get ID [sheet] [range]\` |
+| Write cells | \`mog excel update ID sheet range val1 val2 ...\` |
+| Clear cells | \`mog excel clear ID sheet range\` |
+| Copy workbook | \`mog excel copy ID "New Title"\` |
+| List notebooks | \`mog onenote notebooks\` |
+| List sections | \`mog onenote sections ID\` |
+| List pages | \`mog onenote pages ID\` |
+| Get page | \`mog onenote get ID\` |
+| Create page | \`mog onenote create-page SECTION "Title" "Content"\` |
+| Search notes | \`mog onenote search "query"\` |
+| List tasks | \`mog tasks list\` |
+| Add task | \`mog tasks add "title"\` |
+| Complete task | \`mog tasks done ID\` |
+| Clear completed | \`mog tasks clear\` |
 | List contacts | \`mog contacts list\` |
+| Directory search | \`mog contacts directory "query"\` |
 
 ## Negative Examples
 
@@ -440,13 +662,13 @@ mog follows gog (Google Workspace CLI) patterns where applicable:
 
 \`\`\`bash
 # Wrong: --subject for calendar (use --summary)
-mog cal create --subject "Meeting" --from ... --to ...
+mog calendar create --subject "Meeting" --from ... --to ...
 
 # Wrong: --start/--end for calendar (use --from/--to)
-mog cal create --summary "Meeting" --start 2025-01-15 --end 2025-01-15
+mog calendar create --summary "Meeting" --start 2025-01-15 --end 2025-01-15
 
 # Wrong: --note singular for tasks (use --notes)
-mog todo add "Task" --note "Details"
+mog tasks add "Task" --note "Details"
 
 # Wrong: --limit for max results (use --max)
 mog mail search "query" --limit 10
@@ -455,8 +677,8 @@ mog mail search "query" --limit 10
 ### ✅ CORRECT
 
 \`\`\`bash
-mog cal create --summary "Meeting" --from 2025-01-15T10:00:00 --to 2025-01-15T11:00:00
-mog todo add "Task" --notes "Details"
+mog calendar create --summary "Meeting" --from 2025-01-15T10:00:00 --to 2025-01-15T11:00:00
+mog tasks add "Task" --notes "Details"
 mog mail search "query" --max 10
 \`\`\`
 

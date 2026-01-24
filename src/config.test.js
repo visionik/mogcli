@@ -71,8 +71,12 @@ describe('config', () => {
     });
 
     it('includes contacts scopes', () => {
-      expect(SCOPES).toContain('Contacts.Read');
+      expect(SCOPES).toContain('Contacts.ReadWrite');
       expect(SCOPES).toContain('People.Read');
+    });
+
+    it('includes onenote scopes', () => {
+      expect(SCOPES).toContain('Notes.ReadWrite');
     });
   });
 });

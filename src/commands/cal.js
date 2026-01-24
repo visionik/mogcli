@@ -7,6 +7,8 @@ import {
   updateEvent,
   deleteEvent,
   respondToEvent,
+  getFreeBusy,
+  getCalendarPermissions,
 } from '../api/calendar.js';
 import { formatId, resolveId } from '../ids.js';
 
@@ -323,6 +325,111 @@ export async function calRespond(eventId, response, options) {
     console.log(chalk.green(`${responseEmoji[response.toLowerCase()]} Response sent: ${response}`));
     if (options.comment) {
       console.log(`  Comment: ${chalk.dim(options.comment)}`);
+    }
+  } catch (error) {
+    console.error(chalk.red('Error:'), error.message);
+    process.exit(1);
+  }
+}
+
+export async function calFreeBusy(emails, options) {
+  try {
+    // Default to next 24 hours if not specified
+    const now = new Date();
+    const startTime = options.start || now.toISOString();
+    const endTime = options.end || new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+    const result = await getFreeBusy(emails, startTime, endTime);
+
+    if (options.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    console.log(chalk.bold('Free/Busy Schedule'));
+    console.log(`${chalk.dim('Period:')} ${new Date(startTime).toLocaleString()} - ${new Date(endTime).toLocaleString()}`);
+    console.log('');
+
+    const schedules = result.value || [];
+    for (const schedule of schedules) {
+      console.log(chalk.cyan(schedule.scheduleId));
+      
+      if (schedule.error) {
+        console.log(`  ${chalk.red('Error:')} ${schedule.error.message || 'Unable to retrieve schedule'}`);
+        continue;
+      }
+
+      if (!schedule.scheduleItems || schedule.scheduleItems.length === 0) {
+        console.log(`  ${chalk.green('Free')} - No busy times`);
+        continue;
+      }
+
+      for (const item of schedule.scheduleItems) {
+        const start = new Date(item.start.dateTime).toLocaleString();
+        const end = new Date(item.end.dateTime).toLocaleString();
+        const status = item.status;
+        
+        const statusColor = {
+          free: chalk.green,
+          tentative: chalk.yellow,
+          busy: chalk.red,
+          oof: chalk.magenta,
+          workingElsewhere: chalk.blue,
+        };
+        
+        const colorFn = statusColor[status] || chalk.white;
+        console.log(`  ${colorFn(status.toUpperCase())} ${start} - ${end}`);
+        if (item.subject) {
+          console.log(`    ${chalk.dim(item.subject)}`);
+        }
+      }
+      console.log('');
+    }
+  } catch (error) {
+    console.error(chalk.red('Error:'), error.message);
+    process.exit(1);
+  }
+}
+
+export async function calAcl(calendarId, options) {
+  try {
+    const permissions = await getCalendarPermissions(
+      calendarId ? resolveId(calendarId) : undefined
+    );
+
+    if (options.json) {
+      console.log(JSON.stringify(permissions, null, 2));
+      return;
+    }
+
+    console.log(chalk.bold('Calendar Permissions'));
+    console.log('');
+
+    if (permissions.length === 0) {
+      console.log(chalk.yellow('No permissions found'));
+      return;
+    }
+
+    for (const perm of permissions) {
+      const email = perm.emailAddress?.address || perm.emailAddress?.name || 'Unknown';
+      const role = perm.role || 'unknown';
+      const isRemovable = perm.isRemovable ? '' : chalk.dim(' (built-in)');
+      
+      const roleColor = {
+        owner: chalk.red,
+        write: chalk.yellow,
+        read: chalk.green,
+        freeBusyRead: chalk.blue,
+        none: chalk.dim,
+      };
+      
+      const colorFn = roleColor[role] || chalk.white;
+      console.log(`  ${chalk.cyan(email)}`);
+      console.log(`    Role: ${colorFn(role)}${isRemovable}`);
+      console.log(`    ID: ${chalk.dim(formatId(perm.id))}`);
+      if (options.verbose) {
+        console.log(`    Full: ${chalk.dim(perm.id)}`);
+      }
     }
   } catch (error) {
     console.error(chalk.red('Error:'), error.message);
