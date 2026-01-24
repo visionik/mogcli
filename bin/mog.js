@@ -53,6 +53,7 @@ import {
   contactsDelete,
 } from '../src/commands/contacts.js';
 import { wordList, wordGet, wordExport, wordCopy, wordCreate } from '../src/commands/word.js';
+import { pptList, pptGet, pptExport, pptCopy, pptCreate } from '../src/commands/ppt.js';
 import { printAiHelp } from '../src/ai-help.js';
 
 // Handle --ai-help before commander parses (eager processing)
@@ -388,6 +389,38 @@ word
   .requiredOption('--title <name>', 'Document name')
   .option('--folder <folderId>', 'Destination folder ID')
   .action(withGlobalOpts(wordCreate));
+
+// ============ PowerPoint (Slides) ============
+const ppt = program.command('ppt').alias('slides').description('PowerPoint presentations');
+
+ppt
+  .command('list')
+  .description('List PowerPoint presentations')
+  .option('--max <n>', 'Maximum results', '50')
+  .action(withGlobalOpts(pptList));
+
+ppt.command('get <pptId>').description('Get presentation metadata').action(withGlobalOpts(pptGet));
+
+ppt
+  .command('export <pptId>')
+  .description('Export a presentation')
+  .requiredOption('--out <path>', 'Output file path')
+  .option('--format <format>', 'Export format: pptx, pdf', 'pptx')
+  .action(withGlobalOpts(pptExport));
+
+ppt
+  .command('copy <pptId>')
+  .description('Copy a presentation')
+  .requiredOption('--name <name>', 'Name for the copy')
+  .option('--folder <folderId>', 'Destination folder ID')
+  .action(withGlobalOpts(pptCopy));
+
+ppt
+  .command('create')
+  .description('Create a new PowerPoint presentation')
+  .requiredOption('--title <name>', 'Presentation name')
+  .option('--folder <folderId>', 'Destination folder ID')
+  .action(withGlobalOpts(pptCreate));
 
 // ============ To-Do (Tasks) ============
 const todo = program.command('todo').alias('tasks').description('Microsoft To-Do tasks');
