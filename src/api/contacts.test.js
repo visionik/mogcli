@@ -30,9 +30,7 @@ describe('contacts API', () => {
 
       const result = await getContacts();
 
-      expect(graphRequest).toHaveBeenCalledWith(
-        expect.stringMatching(/\/me\/contacts/)
-      );
+      expect(graphRequest).toHaveBeenCalledWith(expect.stringMatching(/\/me\/contacts/));
       expect(result).toEqual(mockContacts);
     });
 
@@ -41,9 +39,61 @@ describe('contacts API', () => {
 
       await getContacts({ max: 10 });
 
-      expect(graphRequest).toHaveBeenCalledWith(
-        expect.stringMatching(/top.*10/)
-      );
+      expect(graphRequest).toHaveBeenCalledWith(expect.stringMatching(/top.*10/));
+    });
+  });
+
+  describe('searchContacts', () => {
+    it('searches contacts by displayName filter', async () => {
+      const mockContacts = [{ id: 'contact1', displayName: 'John Doe' }];
+      graphRequest.mockResolvedValue({ value: mockContacts });
+
+      const result = await searchContacts('John');
+
+      // URL params get encoded: startswith(displayName,'John') → startswith%28displayName%2C%27John%27%29
+      expect(graphRequest).toHaveBeenCalledWith(expect.stringContaining('/me/contacts?'));
+      expect(graphRequest).toHaveBeenCalledWith(expect.stringContaining('%24filter='));
+      expect(graphRequest).toHaveBeenCalledWith(expect.stringContaining('John'));
+      expect(result).toEqual(mockContacts);
+    });
+
+    it('falls back to people search when filter fails', async () => {
+      const mockPeople = [
+        { id: 'person1', displayName: 'John Doe' },
+        { id: 'person2', displayName: 'Johnny Appleseed' },
+      ];
+      // First call fails (filter not supported), second succeeds (people search)
+      graphRequest
+        .mockRejectedValueOnce(new Error('Filter not supported'))
+        .mockResolvedValueOnce({ value: mockPeople });
+
+      const result = await searchContacts('John');
+
+      expect(graphRequest).toHaveBeenCalledTimes(2);
+      // Second call should be to people search
+      expect(graphRequest).toHaveBeenLastCalledWith(expect.stringContaining('/me/people'));
+      expect(result).toEqual(mockPeople);
+    });
+
+    it('falls back to people search when filter returns empty', async () => {
+      const mockPeople = [{ id: 'person1', displayName: 'John Colleague' }];
+      // First call returns empty, second returns people
+      graphRequest
+        .mockResolvedValueOnce({ value: [] })
+        .mockResolvedValueOnce({ value: mockPeople });
+
+      const result = await searchContacts('John');
+
+      expect(graphRequest).toHaveBeenCalledTimes(2);
+      expect(result).toEqual(mockPeople);
+    });
+
+    it('applies max limit', async () => {
+      graphRequest.mockResolvedValue({ value: [{ id: '1', displayName: 'John' }] });
+
+      await searchContacts('John', { max: 10 });
+
+      expect(graphRequest).toHaveBeenCalledWith(expect.stringContaining('%24top=10'));
     });
   });
 
