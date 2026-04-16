@@ -1,6 +1,6 @@
 ---
 name: mog
-description: Microsoft Ops Gadget — CLI for Microsoft 365 (Mail, Calendar, Drive, Contacts, Tasks, Word, PowerPoint, Excel, OneNote).
+description: "Send and read emails via Outlook, manage calendar events, upload and download files from OneDrive, manage contacts and tasks in Microsoft To-Do, and create or edit Word documents (.docx), PowerPoint presentations (.pptx), and Excel spreadsheets (.xlsx) using the mog CLI for Microsoft 365. Use when the user needs to interact with Microsoft 365 services including email, calendar, OneDrive, contacts, tasks, Word, PowerPoint, Excel, or OneNote from the command line."
 ---
 
 # mog — Microsoft Ops Gadget
@@ -24,6 +24,15 @@ This outputs the full dashdash-compliant documentation including:
 - Troubleshooting
 - Slug system explanation
 - gog compatibility notes
+
+## Setup Workflow
+
+1. Register an Azure AD app (see Setup section below or `mog --ai-help`)
+2. Authenticate: `mog auth login --client-id YOUR_CLIENT_ID`
+3. Verify: `mog auth list` — confirm your account appears
+4. Test: `mog mail search "*" --max 1` — should return a result if connected
+
+**If auth fails**: Check that your Azure AD app has "Allow public client flows" enabled and is set to multitenant. Run `mog auth login` again if tokens expire.
 
 ## Modules
 
@@ -127,22 +136,22 @@ mog mail search "*"
 mog auth list
 ```
 
-## Credential Storage
+## Destructive Operations
 
-OAuth tokens stored in config directory (0600 permissions):
+Verify targets before running destructive commands:
+```bash
+# Before deleting a file, confirm the slug
+mog drive ls --verbose
+mog drive rm <slug>
 
-| Platform | Location |
-|----------|----------|
-| **macOS** | `~/.config/mog/{account}/` |
-| **Linux** | `~/.config/mog/{account}/` |
-| **Windows** | `%USERPROFILE%\.config\mog\{account}\` |
+# Before clearing tasks, review the list
+mog tasks list
+mog tasks clear
 
-Files per account:
-- `tokens.json` - OAuth tokens
-- `settings.json` - Client ID
-- `slugs.json` - Slug cache
-
-Default account is `default`. Existing single-account setups auto-migrate.
+# Before overwriting Excel data, read current values
+mog excel get <id> Sheet1 A1:D10
+mog excel update <id> Sheet1 A1:B2 val1 val2 val3 val4
+```
 
 ## See Also
 
