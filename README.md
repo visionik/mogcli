@@ -205,11 +205,12 @@ mog mail search <query>              # Search messages
 mog mail search "*" --max 10         # Recent messages
 mog mail get <id>                    # Read a message
 mog mail send --to X --subject Y --body Z
+mog mail send --to X --subject Y --body Z --attachment ./file.pdf   # Attach file(s); repeatable
 mog mail folders                     # List folders
 
 # Drafts
 mog mail drafts list
-mog mail drafts create --to X --subject Y --body Z
+mog mail drafts create --to X --subject Y --body Z [--attachment ./file.pdf]
 mog mail drafts send <draftId>
 
 # Attachments
