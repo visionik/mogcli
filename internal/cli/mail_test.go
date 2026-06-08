@@ -970,3 +970,59 @@ func mustJSON(data interface{}) []byte {
 	}
 	return b
 }
+
+func TestBuildMailSearchQuery(t *testing.T) {
+	// Free-text search must NOT include $orderby — Graph rejects the
+	// combination ("SearchWithOrderBy").
+	q := buildMailSearchQuery("hello", 25)
+	assert.Equal(t, `"hello"`, q.Get("$search"))
+	assert.Empty(t, q.Get("$orderby"))
+	assert.Equal(t, "25", q.Get("$top"))
+
+	// Listing (* or empty) sorts by date and performs no $search.
+	for _, all := range []string{"*", ""} {
+		q := buildMailSearchQuery(all, 10)
+		assert.Empty(t, q.Get("$search"))
+		assert.Equal(t, "receivedDateTime desc", q.Get("$orderby"))
+		assert.Equal(t, "10", q.Get("$top"))
+	}
+}
+
+func TestBuildMailSearchQuery_EscapingAndWhitespace(t *testing.T) {
+	// Backslashes and double quotes in the term must be escaped for Graph $search.
+	q := buildMailSearchQuery(`a"b\c`, 5)
+	assert.Equal(t, `"a\"b\\c"`, q.Get("$search"))
+	assert.Empty(t, q.Get("$orderby"))
+
+	// Whitespace-only is treated like listing (no $search, sorted by date).
+	q = buildMailSearchQuery("   ", 5)
+	assert.Empty(t, q.Get("$search"))
+	assert.Equal(t, "receivedDateTime desc", q.Get("$orderby"))
+
+	// Surrounding whitespace around a real term is trimmed.
+	q = buildMailSearchQuery("  hello  ", 5)
+	assert.Equal(t, `"hello"`, q.Get("$search"))
+}
+
+func TestMailSearchCmd_RunQuery(t *testing.T) {
+	var gotSearch, gotOrder string
+	mock := &testutil.MockClient{
+		GetFunc: func(ctx context.Context, path string, query url.Values) ([]byte, error) {
+			gotSearch = query.Get("$search")
+			gotOrder = query.Get("$orderby")
+			return mustJSON(map[string]interface{}{"value": []map[string]interface{}{}}), nil
+		},
+	}
+	root := &Root{ClientFactory: mockClientFactory(mock)}
+
+	// A real query sets $search and must NOT set $orderby (Graph rejects the combo).
+	_ = captureOutput(func() { _ = (&MailSearchCmd{Query: "test", Max: 10}).Run(root) })
+	assert.Equal(t, `"test"`, gotSearch)
+	assert.Empty(t, gotOrder)
+
+	// "*" lists and sorts by date, with no $search.
+	gotSearch, gotOrder = "", ""
+	_ = captureOutput(func() { _ = (&MailSearchCmd{Query: "*", Max: 10}).Run(root) })
+	assert.Empty(t, gotSearch)
+	assert.Equal(t, "receivedDateTime desc", gotOrder)
+}
