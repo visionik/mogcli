@@ -51,6 +51,7 @@ mog mail send [flags]
   --body <text>                      # Body text
   --body-file <path>                 # Read body from file (- for stdin)
   --body-html <html>                 # HTML body
+  --attachment <path>                # Attach a file (repeatable)
 
 mog mail folders                     # List mail folders
 

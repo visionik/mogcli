@@ -3,11 +3,13 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -969,4 +971,224 @@ func mustJSON(data interface{}) []byte {
 		panic(err)
 	}
 	return b
+}
+
+func TestBuildAttachments(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "hello.txt")
+	require.NoError(t, os.WriteFile(p, []byte("hi there"), 0o600))
+
+	atts, err := buildAttachments([]string{p})
+	require.NoError(t, err)
+	require.Len(t, atts, 1)
+	assert.Equal(t, "#microsoft.graph.fileAttachment", atts[0].ODataType)
+	assert.Equal(t, "hello.txt", atts[0].Name)
+	assert.Contains(t, atts[0].ContentType, "text/plain")
+	assert.Equal(t, base64.StdEncoding.EncodeToString([]byte("hi there")), atts[0].ContentBytes)
+
+	// Unknown extension falls back to octet-stream.
+	bin := filepath.Join(dir, "blob.unknownext")
+	require.NoError(t, os.WriteFile(bin, []byte{0x00, 0x01}, 0o600))
+	atts, err = buildAttachments([]string{bin})
+	require.NoError(t, err)
+	assert.Equal(t, "application/octet-stream", atts[0].ContentType)
+
+	// Empty path, missing file and a directory are rejected with clear errors.
+	_, err = buildAttachments([]string{""})
+	assert.Error(t, err)
+	_, err = buildAttachments([]string{filepath.Join(dir, "does-not-exist.txt")})
+	assert.Error(t, err)
+	_, err = buildAttachments([]string{dir})
+	assert.Error(t, err)
+
+	// Files at/over the 3 MB inline limit are rejected before upload.
+	big := filepath.Join(dir, "big.bin")
+	require.NoError(t, os.WriteFile(big, make([]byte, maxInlineAttachmentBytes), 0o600))
+	_, err = buildAttachments([]string{big})
+	assert.Error(t, err)
+}
+
+func TestMailAttachmentsInPayload(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "doc.txt")
+	require.NoError(t, os.WriteFile(p, []byte("payload"), 0o600))
+
+	// decodeAttachments marshals the captured POST body and pulls out the
+	// attachments array (optionally nested under a key, e.g. "message").
+	decodeAttachments := func(body interface{}, key string) []map[string]interface{} {
+		raw, err := json.Marshal(body)
+		require.NoError(t, err)
+		var m map[string]interface{}
+		require.NoError(t, json.Unmarshal(raw, &m))
+		container := m
+		if key != "" {
+			inner, ok := m[key].(map[string]interface{})
+			require.True(t, ok, "expected %q object in payload", key)
+			container = inner
+		}
+		arr, ok := container["attachments"].([]interface{})
+		require.True(t, ok, "expected attachments array in payload")
+		out := make([]map[string]interface{}, 0, len(arr))
+		for _, a := range arr {
+			out = append(out, a.(map[string]interface{}))
+		}
+		return out
+	}
+
+	t.Run("send wraps attachments under message", func(t *testing.T) {
+		var gotPath string
+		var gotBody interface{}
+		mock := &testutil.MockClient{
+			PostFunc: func(ctx context.Context, path string, body interface{}) ([]byte, error) {
+				gotPath, gotBody = path, body
+				return nil, nil
+			},
+		}
+		root := &Root{ClientFactory: mockClientFactory(mock)}
+		err := (&MailSendCmd{To: []string{"a@b.de"}, Subject: "S", Body: "B", Attachment: []string{p}}).Run(root)
+		require.NoError(t, err)
+		assert.Equal(t, "/me/sendMail", gotPath)
+		atts := decodeAttachments(gotBody, "message")
+		require.Len(t, atts, 1)
+		assert.Equal(t, "#microsoft.graph.fileAttachment", atts[0]["@odata.type"])
+		assert.Equal(t, "doc.txt", atts[0]["name"])
+		assert.Equal(t, base64.StdEncoding.EncodeToString([]byte("payload")), atts[0]["contentBytes"])
+	})
+
+	t.Run("drafts create posts attachments on the message", func(t *testing.T) {
+		var gotPath string
+		var gotBody interface{}
+		mock := &testutil.MockClient{
+			PostFunc: func(ctx context.Context, path string, body interface{}) ([]byte, error) {
+				gotPath, gotBody = path, body
+				return mustJSON(map[string]interface{}{"id": "d1"}), nil
+			},
+		}
+		root := &Root{ClientFactory: mockClientFactory(mock)}
+		err := (&MailDraftsCreateCmd{To: []string{"a@b.de"}, Subject: "S", Body: "B", Attachment: []string{p}}).Run(root)
+		require.NoError(t, err)
+		assert.Equal(t, "/me/messages", gotPath)
+		atts := decodeAttachments(gotBody, "")
+		require.Len(t, atts, 1)
+		assert.Equal(t, "doc.txt", atts[0]["name"])
+	})
+
+}
+
+func TestMailReplyWithAttachments(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "doc.txt")
+	require.NoError(t, os.WriteFile(p, []byte("payload"), 0o600))
+
+	type call struct{ op, path string }
+	toMap := func(body interface{}) map[string]interface{} {
+		raw, _ := json.Marshal(body)
+		var m map[string]interface{}
+		_ = json.Unmarshal(raw, &m)
+		return m
+	}
+	// newMock records the ordered (method, path) calls. failAt injects an error
+	// at the named step (createReply/patch/attach/send); "" means all succeed.
+	newMock := func(failAt string, replyBody map[string]interface{}) (*testutil.MockClient, *[]call, *map[string]interface{}, *map[string]interface{}) {
+		var calls []call
+		var lastPatch, lastAttach map[string]interface{}
+		mock := &testutil.MockClient{
+			PostFunc: func(ctx context.Context, path string, body interface{}) ([]byte, error) {
+				calls = append(calls, call{"POST", path})
+				switch {
+				case strings.HasSuffix(path, "/createReply"):
+					if failAt == "createReply" {
+						return nil, errors.New("boom")
+					}
+					draft := map[string]interface{}{"id": "reply-draft-1"}
+					if replyBody != nil {
+						draft["body"] = replyBody
+					}
+					return mustJSON(draft), nil
+				case strings.HasSuffix(path, "/attachments"):
+					lastAttach = toMap(body)
+					if failAt == "attach" {
+						return nil, errors.New("boom")
+					}
+				case strings.HasSuffix(path, "/send"):
+					if failAt == "send" {
+						return nil, errors.New("boom")
+					}
+				}
+				return nil, nil
+			},
+			PatchFunc: func(ctx context.Context, path string, body interface{}) ([]byte, error) {
+				calls = append(calls, call{"PATCH", path})
+				lastPatch = toMap(body)
+				if failAt == "patch" {
+					return nil, errors.New("boom")
+				}
+				return nil, nil
+			},
+			DeleteFunc: func(ctx context.Context, path string) error {
+				calls = append(calls, call{"DELETE", path})
+				return nil
+			},
+		}
+		return mock, &calls, &lastPatch, &lastAttach
+	}
+
+	t.Run("text reply: createReply→patch→attach→send in order, quote via comment", func(t *testing.T) {
+		mock, calls, lastPatch, lastAttach := newMock("", nil)
+		root := &Root{ClientFactory: mockClientFactory(mock)}
+		err := (&MailSendCmd{To: []string{"a@b.de"}, Cc: []string{"c@b.de"}, Body: "hi", Attachment: []string{p}, ReplyToMessageID: "m1"}).Run(root)
+		require.NoError(t, err)
+		require.Equal(t, []call{
+			{"POST", "/me/messages/m1/createReply"},
+			{"PATCH", "/me/messages/reply-draft-1"},
+			{"POST", "/me/messages/reply-draft-1/attachments"},
+			{"POST", "/me/messages/reply-draft-1/send"},
+		}, *calls)
+		// Recipients are set on the draft; text body is NOT patched (kept via comment).
+		assert.NotNil(t, (*lastPatch)["toRecipients"])
+		assert.NotNil(t, (*lastPatch)["ccRecipients"])
+		_, hasBody := (*lastPatch)["body"]
+		assert.False(t, hasBody, "text reply keeps the quote via comment, no body PATCH")
+		// Attachment payload is correct.
+		assert.Equal(t, "#microsoft.graph.fileAttachment", (*lastAttach)["@odata.type"])
+		assert.Equal(t, "doc.txt", (*lastAttach)["name"])
+		assert.Equal(t, base64.StdEncoding.EncodeToString([]byte("payload")), (*lastAttach)["contentBytes"])
+	})
+
+	t.Run("html reply prepends user html before the quoted draft body", func(t *testing.T) {
+		mock, _, lastPatch, _ := newMock("", map[string]interface{}{"contentType": "html", "content": "<i>quote</i>"})
+		root := &Root{ClientFactory: mockClientFactory(mock)}
+		err := (&MailSendCmd{To: []string{"a@b.de"}, BodyHTML: "<b>hi</b>", Attachment: []string{p}, ReplyToMessageID: "m1"}).Run(root)
+		require.NoError(t, err)
+		b, ok := (*lastPatch)["body"].(map[string]interface{})
+		require.True(t, ok, "html reply must PATCH the body")
+		assert.Equal(t, "html", b["contentType"])
+		assert.Contains(t, b["content"], "<b>hi</b>")
+		assert.Contains(t, b["content"], "<i>quote</i>")
+	})
+
+	t.Run("createReply failure: surfaces error, no further calls", func(t *testing.T) {
+		mock, calls, _, _ := newMock("createReply", nil)
+		root := &Root{ClientFactory: mockClientFactory(mock)}
+		err := (&MailSendCmd{To: []string{"a@b.de"}, Body: "hi", Attachment: []string{p}, ReplyToMessageID: "m1"}).Run(root)
+		assert.Error(t, err)
+		require.Equal(t, []call{{"POST", "/me/messages/m1/createReply"}}, *calls)
+	})
+
+	t.Run("attach failure: deletes orphan draft, does not send", func(t *testing.T) {
+		mock, calls, _, _ := newMock("attach", nil)
+		root := &Root{ClientFactory: mockClientFactory(mock)}
+		err := (&MailSendCmd{To: []string{"a@b.de"}, Body: "hi", Attachment: []string{p}, ReplyToMessageID: "m1"}).Run(root)
+		assert.Error(t, err)
+		assert.Contains(t, *calls, call{"DELETE", "/me/messages/reply-draft-1"})
+		assert.NotContains(t, *calls, call{"POST", "/me/messages/reply-draft-1/send"})
+	})
+
+	t.Run("send failure: keeps the draft (no delete)", func(t *testing.T) {
+		mock, calls, _, _ := newMock("send", nil)
+		root := &Root{ClientFactory: mockClientFactory(mock)}
+		err := (&MailSendCmd{To: []string{"a@b.de"}, Body: "hi", Attachment: []string{p}, ReplyToMessageID: "m1"}).Run(root)
+		assert.Error(t, err)
+		assert.NotContains(t, *calls, call{"DELETE", "/me/messages/reply-draft-1"})
+	})
 }

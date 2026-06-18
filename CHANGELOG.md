@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `--attachment <path>` flag (repeatable) for `mail send` and `mail drafts create`. Files are attached as inline base64 `fileAttachment` objects with the content type inferred from the extension. Paths are validated up front (empty path, missing file, directory, and the 3 MB inline-attachment limit are rejected with clear errors). Replies (`--reply-to-message-id`) also support `--attachment`: since the single-step `/reply` action cannot carry inline attachments, the reply is built as a draft (`createReply`), populated, attached, and then sent. (#10)
+
 ## [0.3.1] - 2026-01-26
 
 ### Added

@@ -2,11 +2,14 @@ package cli
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -140,6 +143,7 @@ type MailSendCmd struct {
 	Body             string   `help:"Message body"`
 	BodyFile         string   `help:"Read body from file (- for stdin)" name:"body-file"`
 	BodyHTML         string   `help:"HTML body" name:"body-html"`
+	Attachment       []string `help:"Attach a file; repeatable" name:"attachment"`
 	ReplyToMessageID string   `help:"Reply to message ID" name:"reply-to-message-id"`
 }
 
@@ -178,21 +182,29 @@ func (c *MailSendCmd) Run(root *Root) error {
 	// Reply to existing message
 	if c.ReplyToMessageID != "" {
 		messageID := graph.ResolveID(c.ReplyToMessageID)
-		message := map[string]interface{}{
-			"body": map[string]string{
-				"contentType": contentType,
-				"content":     body,
-			},
-			"toRecipients": formatRecipients(c.To),
-		}
-		addRecipientsIfPresent(message, c.Cc, c.Bcc)
-		replyMsg := map[string]interface{}{
-			"message": message,
-			"comment": body,
-		}
-		_, err = client.Post(ctx, fmt.Sprintf("/me/messages/%s/reply", messageID), replyMsg)
-		if err != nil {
-			return err
+		if len(c.Attachment) > 0 {
+			// The single-step /reply action cannot carry inline attachments,
+			// so build a reply draft, populate it, attach the files, then send.
+			if err := c.sendReplyWithAttachments(ctx, client, messageID, contentType, body); err != nil {
+				return err
+			}
+		} else {
+			message := map[string]interface{}{
+				"toRecipients": formatRecipients(c.To),
+			}
+			addRecipientsIfPresent(message, c.Cc, c.Bcc)
+			replyMsg := map[string]interface{}{"message": message}
+			// Graph's /reply accepts EITHER comment OR message.body, not both
+			// (sending both can return 400). Use comment for text replies so the
+			// quoted original is kept; set the body directly for HTML replies.
+			if contentType == "html" {
+				message["body"] = map[string]string{"contentType": "html", "content": body}
+			} else {
+				replyMsg["comment"] = body
+			}
+			if _, err = client.Post(ctx, fmt.Sprintf("/me/messages/%s/reply", messageID), replyMsg); err != nil {
+				return err
+			}
 		}
 	} else {
 		message := map[string]interface{}{
@@ -204,6 +216,13 @@ func (c *MailSendCmd) Run(root *Root) error {
 			"toRecipients": formatRecipients(c.To),
 		}
 		addRecipientsIfPresent(message, c.Cc, c.Bcc)
+		if len(c.Attachment) > 0 {
+			atts, err := buildAttachments(c.Attachment)
+			if err != nil {
+				return err
+			}
+			message["attachments"] = atts
+		}
 		msg := map[string]interface{}{
 			"message": message,
 		}
@@ -214,6 +233,66 @@ func (c *MailSendCmd) Run(root *Root) error {
 	}
 
 	fmt.Println("✓ Email sent successfully")
+	return nil
+}
+
+// sendReplyWithAttachments replies to messageID with file attachments. The
+// single-step /reply action cannot carry inline attachments, so this creates a
+// reply draft (createReply, which keeps the quoted original), sets recipients,
+// adds each attachment, and sends it. On a pre-send failure the orphaned draft
+// is deleted (best effort); if sending itself fails the draft is left in Drafts
+// and named in the error.
+func (c *MailSendCmd) sendReplyWithAttachments(ctx context.Context, client graph.Client, messageID, contentType, body string) error {
+	atts, err := buildAttachments(c.Attachment)
+	if err != nil {
+		return err
+	}
+
+	// For text replies, pass the user's text as the createReply comment so the
+	// draft keeps the quoted original. HTML is prepended below instead (a
+	// comment would be HTML-escaped).
+	createBody := map[string]interface{}{}
+	if contentType != "html" {
+		createBody["comment"] = body
+	}
+	data, err := client.Post(ctx, fmt.Sprintf("/me/messages/%s/createReply", messageID), createBody)
+	if err != nil {
+		return err
+	}
+	var draft Message
+	if err := json.Unmarshal(data, &draft); err != nil {
+		return err
+	}
+	if draft.ID == "" {
+		return fmt.Errorf("createReply returned no draft message id")
+	}
+	draftID := draft.ID
+	cleanup := func() { _ = client.Delete(ctx, fmt.Sprintf("/me/messages/%s", draftID)) }
+
+	update := map[string]interface{}{"toRecipients": formatRecipients(c.To)}
+	addRecipientsIfPresent(update, c.Cc, c.Bcc)
+	if contentType == "html" {
+		quoted := ""
+		if draft.Body != nil {
+			quoted = draft.Body.Content
+		}
+		update["body"] = map[string]string{"contentType": "html", "content": body + "<br><br>" + quoted}
+	}
+	if _, err := client.Patch(ctx, fmt.Sprintf("/me/messages/%s", draftID), update); err != nil {
+		cleanup()
+		return fmt.Errorf("failed to prepare reply draft %s (removed): %w", graph.FormatID(draftID), err)
+	}
+
+	for _, a := range atts {
+		if _, err := client.Post(ctx, fmt.Sprintf("/me/messages/%s/attachments", draftID), a); err != nil {
+			cleanup()
+			return fmt.Errorf("failed to attach %q to reply draft %s (removed): %w", a.Name, graph.FormatID(draftID), err)
+		}
+	}
+
+	if _, err := client.Post(ctx, fmt.Sprintf("/me/messages/%s/send", draftID), nil); err != nil {
+		return fmt.Errorf("reply draft %s was prepared but sending failed; it is still in your Drafts: %w", graph.FormatID(draftID), err)
+	}
 	return nil
 }
 
@@ -308,10 +387,11 @@ func (c *MailDraftsListCmd) Run(root *Root) error {
 
 // MailDraftsCreateCmd creates a draft.
 type MailDraftsCreateCmd struct {
-	To       []string `help:"Recipient(s)"`
-	Subject  string   `help:"Subject line"`
-	Body     string   `help:"Message body"`
-	BodyFile string   `help:"Read body from file" name:"body-file"`
+	To         []string `help:"Recipient(s)"`
+	Subject    string   `help:"Subject line"`
+	Body       string   `help:"Message body"`
+	BodyFile   string   `help:"Read body from file" name:"body-file"`
+	Attachment []string `help:"Attach a file; repeatable" name:"attachment"`
 }
 
 // Run executes drafts create.
@@ -337,6 +417,13 @@ func (c *MailDraftsCreateCmd) Run(root *Root) error {
 			"content":     body,
 		},
 		"toRecipients": formatRecipients(c.To),
+	}
+	if len(c.Attachment) > 0 {
+		atts, err := buildAttachments(c.Attachment)
+		if err != nil {
+			return err
+		}
+		msg["attachments"] = atts
 	}
 
 	ctx := context.Background()
@@ -541,6 +628,62 @@ func addRecipientsIfPresent(msg map[string]interface{}, cc, bcc []string) {
 	if len(bcc) > 0 {
 		msg["bccRecipients"] = formatRecipients(bcc)
 	}
+}
+
+// buildAttachments reads each file path and builds a Microsoft Graph
+// fileAttachment object (base64-encoded inline). The content type is inferred
+// from the file extension. This is suitable for small files; large files would
+// require an upload session, which can be added later.
+// maxInlineAttachmentBytes is Microsoft Graph's ceiling for inline (base64)
+// file attachments on a message. Larger files require an upload session, which
+// is not yet supported here — so they are rejected with a clear message rather
+// than failing later with an opaque Graph error.
+const maxInlineAttachmentBytes = 3 * 1024 * 1024
+
+// fileAttachment is a Microsoft Graph fileAttachment payload object.
+type fileAttachment struct {
+	ODataType    string `json:"@odata.type"`
+	Name         string `json:"name"`
+	ContentType  string `json:"contentType"`
+	ContentBytes string `json:"contentBytes"`
+}
+
+// buildAttachments validates each path and builds an inline base64 Graph
+// fileAttachment. The content type is inferred from the extension (falling back
+// to application/octet-stream). Empty paths, missing files, directories and
+// files at/over the 3 MB inline limit are rejected up front.
+func buildAttachments(paths []string) ([]fileAttachment, error) {
+	atts := make([]fileAttachment, 0, len(paths))
+	for _, p := range paths {
+		if strings.TrimSpace(p) == "" {
+			return nil, fmt.Errorf("attachment path is empty")
+		}
+		info, err := os.Stat(p)
+		if err != nil {
+			return nil, fmt.Errorf("attachment %q: %w", p, err)
+		}
+		if info.IsDir() {
+			return nil, fmt.Errorf("attachment %q is a directory", p)
+		}
+		if info.Size() >= maxInlineAttachmentBytes {
+			return nil, fmt.Errorf("attachment %q is %.1f MB; inline attachments must be under 3 MB", p, float64(info.Size())/(1024*1024))
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read attachment %q: %w", p, err)
+		}
+		contentType := mime.TypeByExtension(filepath.Ext(p))
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		atts = append(atts, fileAttachment{
+			ODataType:    "#microsoft.graph.fileAttachment",
+			Name:         filepath.Base(p),
+			ContentType:  contentType,
+			ContentBytes: base64.StdEncoding.EncodeToString(data),
+		})
+	}
+	return atts, nil
 }
 
 func printMessage(msg Message, verbose bool) {
