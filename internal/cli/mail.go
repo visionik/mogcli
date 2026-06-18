@@ -47,6 +47,33 @@ type MailSearchCmd struct {
 	Folder string `help:"Folder ID to search in"`
 }
 
+// escapeSearchTerm escapes a user-provided term for a Graph $search KQL phrase.
+// Inside the quoted phrase, backslashes and double quotes must be
+// backslash-escaped (backslash first, so an escaped quote is not double-escaped).
+func escapeSearchTerm(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
+}
+
+// buildMailSearchQuery builds the OData query for listing/searching messages.
+// Microsoft Graph rejects $search combined with $orderby ("SearchWithOrderBy:
+// The query parameter '$orderby' is not supported with '$search'"), so $orderby
+// is only applied when not performing a $search. Empty/whitespace and "*" are
+// treated as a plain (sorted) listing.
+func buildMailSearchQuery(q string, max int) url.Values {
+	query := url.Values{}
+	query.Set("$top", fmt.Sprintf("%d", max))
+	query.Set("$select", "id,subject,from,receivedDateTime,isRead,hasAttachments")
+
+	if term := strings.TrimSpace(q); term != "" && term != "*" {
+		query.Set("$search", fmt.Sprintf(`"%s"`, escapeSearchTerm(term)))
+	} else {
+		query.Set("$orderby", "receivedDateTime desc")
+	}
+	return query
+}
+
 // Run executes mail search.
 func (c *MailSearchCmd) Run(root *Root) error {
 	client, err := root.GetClient()
@@ -55,14 +82,7 @@ func (c *MailSearchCmd) Run(root *Root) error {
 	}
 
 	ctx := context.Background()
-	query := url.Values{}
-	query.Set("$top", fmt.Sprintf("%d", c.Max))
-	query.Set("$orderby", "receivedDateTime desc")
-	query.Set("$select", "id,subject,from,receivedDateTime,isRead,hasAttachments")
-
-	if c.Query != "*" && c.Query != "" {
-		query.Set("$search", fmt.Sprintf(`"%s"`, c.Query))
-	}
+	query := buildMailSearchQuery(c.Query, c.Max)
 
 	path := "/me/messages"
 	if c.Folder != "" {

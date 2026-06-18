@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `mail search` / `mail list` no longer send `$orderby` together with `$search`. Microsoft Graph rejects that combination (`SearchWithOrderBy: The query parameter '$orderby' is not supported with '$search'`), so every text search failed. Date sorting is kept for listing (`*` / empty query). Search terms are now escaped for the `$search` phrase (backslash and double quote), and whitespace-only queries are treated as a plain listing. (#11)
+
 ## [0.3.1] - 2026-01-26
 
 ### Added
