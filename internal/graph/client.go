@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -21,8 +22,17 @@ var (
 	// It can be overridden for testing.
 	GraphBaseURL = "https://graph.microsoft.com/v1.0"
 	// AuthURL is the base URL for OAuth2 authentication.
-	AuthURL = "https://login.microsoftonline.com/common/oauth2/v2.0"
+	// Supports MOG_TENANT_ID env var for single-tenant apps.
+	AuthURL = initAuthURL()
 )
+
+func initAuthURL() string {
+	tenant := os.Getenv("MOG_TENANT_ID")
+	if tenant == "" {
+		tenant = "common"
+	}
+	return "https://login.microsoftonline.com/" + tenant + "/oauth2/v2.0"
+}
 
 // Client defines the interface for Microsoft Graph API operations.
 type Client interface {
