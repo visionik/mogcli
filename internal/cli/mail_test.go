@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -551,6 +552,133 @@ func TestMailDraftsCreateCmd_Run(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMailDraftsCreateCmd_Reply(t *testing.T) {
+	t.Run("with explicit recipient patches and does not send", func(t *testing.T) {
+		var postPaths []string
+		var createReplyBody interface{}
+		patchCalled := false
+		mock := &testutil.MockClient{
+			PostFunc: func(ctx context.Context, path string, body interface{}) ([]byte, error) {
+				postPaths = append(postPaths, path)
+				if strings.Contains(path, "/createReply") {
+					createReplyBody = body
+					return mustJSON(map[string]interface{}{"id": "reply-draft-123"}), nil
+				}
+				return []byte(`{}`), nil
+			},
+			PatchFunc: func(ctx context.Context, path string, body interface{}) ([]byte, error) {
+				patchCalled = true
+				return []byte(`{}`), nil
+			},
+		}
+		cmd := &MailDraftsCreateCmd{
+			To:               []string{"to@example.com"},
+			Body:             "My reply",
+			ReplyToMessageID: "orig-msg-123",
+		}
+		root := &Root{ClientFactory: mockClientFactory(mock)}
+
+		var err error
+		output := captureOutput(func() { err = cmd.Run(root) })
+
+		require.NoError(t, err)
+		assert.Contains(t, output, "Reply draft created")
+
+		foundCreateReply := false
+		for _, p := range postPaths {
+			assert.NotContains(t, p, "/send", "a reply DRAFT must never be sent")
+			if strings.Contains(p, "/createReply") {
+				foundCreateReply = true
+			}
+		}
+		assert.True(t, foundCreateReply, "expected a createReply POST")
+		assert.True(t, patchCalled, "expected recipients PATCH when --to is supplied")
+		if m, ok := createReplyBody.(map[string]interface{}); assert.True(t, ok, "createReply body should be a map") {
+			assert.Equal(t, "My reply", m["comment"])
+		}
+	})
+
+	t.Run("without recipient keeps original and skips patch", func(t *testing.T) {
+		patchCalled := false
+		mock := &testutil.MockClient{
+			PostFunc: func(ctx context.Context, path string, body interface{}) ([]byte, error) {
+				if strings.Contains(path, "/createReply") {
+					return mustJSON(map[string]interface{}{"id": "reply-draft-456"}), nil
+				}
+				return []byte(`{}`), nil
+			},
+			PatchFunc: func(ctx context.Context, path string, body interface{}) ([]byte, error) {
+				patchCalled = true
+				return []byte(`{}`), nil
+			},
+		}
+		cmd := &MailDraftsCreateCmd{
+			Body:             "My reply",
+			ReplyToMessageID: "orig-msg-123",
+		}
+		root := &Root{ClientFactory: mockClientFactory(mock)}
+
+		var err error
+		output := captureOutput(func() { err = cmd.Run(root) })
+
+		require.NoError(t, err)
+		assert.Contains(t, output, "Reply draft created")
+		assert.False(t, patchCalled, "no recipients supplied: must keep createReply's original recipients")
+	})
+
+	t.Run("createReply API error surfaces", func(t *testing.T) {
+		mock := &testutil.MockClient{
+			PostFunc: func(ctx context.Context, path string, body interface{}) ([]byte, error) {
+				return nil, errors.New("API error")
+			},
+		}
+		cmd := &MailDraftsCreateCmd{Body: "x", ReplyToMessageID: "orig-msg-123"}
+		root := &Root{ClientFactory: mockClientFactory(mock)}
+		err := cmd.Run(root)
+		assert.Error(t, err)
+	})
+
+	t.Run("createReply without an id is an error", func(t *testing.T) {
+		mock := &testutil.MockClient{
+			PostFunc: func(ctx context.Context, path string, body interface{}) ([]byte, error) {
+				return []byte(`{}`), nil // no "id"
+			},
+		}
+		cmd := &MailDraftsCreateCmd{Body: "x", ReplyToMessageID: "orig-msg-123"}
+		root := &Root{ClientFactory: mockClientFactory(mock)}
+		err := cmd.Run(root)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no draft message id")
+	})
+
+	t.Run("recipient patch failure removes the orphaned draft", func(t *testing.T) {
+		deletedPath := ""
+		mock := &testutil.MockClient{
+			PostFunc: func(ctx context.Context, path string, body interface{}) ([]byte, error) {
+				return mustJSON(map[string]interface{}{"id": "reply-draft-789"}), nil
+			},
+			PatchFunc: func(ctx context.Context, path string, body interface{}) ([]byte, error) {
+				return nil, errors.New("patch boom")
+			},
+			DeleteFunc: func(ctx context.Context, path string) error {
+				deletedPath = path
+				return nil
+			},
+		}
+		cmd := &MailDraftsCreateCmd{
+			To:               []string{"to@example.com"},
+			Body:             "x",
+			ReplyToMessageID: "orig-msg-123",
+		}
+		root := &Root{ClientFactory: mockClientFactory(mock)}
+		err := cmd.Run(root)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "recipients")
+		assert.Contains(t, err.Error(), "removed", "should report the orphan was cleaned up")
+		assert.NotEmpty(t, deletedPath, "the orphaned draft must be deleted on patch failure")
+	})
 }
 
 func TestMailDraftsSendCmd_Run(t *testing.T) {

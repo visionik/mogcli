@@ -55,7 +55,8 @@ mog mail send [flags]
 mog mail folders                     # List mail folders
 
 mog mail drafts list
-mog mail drafts create [flags]       # Same flags as send
+mog mail drafts create [flags]       # To/Subject/Body/Cc/Bcc/BodyFile
+  --reply-to-message-id <id>         # Make a threaded reply DRAFT (kept for review, not sent)
 mog mail drafts send <draftId>
 mog mail drafts delete <draftId>
 

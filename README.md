@@ -210,6 +210,7 @@ mog mail folders                     # List folders
 # Drafts
 mog mail drafts list
 mog mail drafts create --to X --subject Y --body Z
+mog mail drafts create --reply-to-message-id <id> --body Z   # Threaded reply draft (review, then send); --to defaults to the original sender
 mog mail drafts send <draftId>
 
 # Attachments
