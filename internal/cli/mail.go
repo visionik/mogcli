@@ -308,10 +308,13 @@ func (c *MailDraftsListCmd) Run(root *Root) error {
 
 // MailDraftsCreateCmd creates a draft.
 type MailDraftsCreateCmd struct {
-	To       []string `help:"Recipient(s)"`
-	Subject  string   `help:"Subject line"`
-	Body     string   `help:"Message body"`
-	BodyFile string   `help:"Read body from file" name:"body-file"`
+	To               []string `help:"Recipient(s)"`
+	Cc               []string `help:"CC recipient(s)"`
+	Bcc              []string `help:"BCC recipient(s)"`
+	Subject          string   `help:"Subject line"`
+	Body             string   `help:"Message body"`
+	BodyFile         string   `help:"Read body from file" name:"body-file"`
+	ReplyToMessageID string   `help:"Create the draft as a threaded reply to this message ID (keeps the quoted original); --to/--subject become optional" name:"reply-to-message-id"`
 }
 
 // Run executes drafts create.
@@ -325,9 +328,22 @@ func (c *MailDraftsCreateCmd) Run(root *Root) error {
 	if c.BodyFile != "" {
 		data, err := os.ReadFile(c.BodyFile)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to read body file: %w", err)
 		}
 		body = string(data)
+	}
+
+	ctx := context.Background()
+
+	// Threaded reply draft: keep the quoted original and conversation threading,
+	// but leave it in Drafts for review instead of sending.
+	if c.ReplyToMessageID != "" {
+		draftID, err := c.createReplyDraft(ctx, client, graph.ResolveID(c.ReplyToMessageID), body)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("✓ Reply draft created: %s\n", graph.FormatID(draftID))
+		return nil
 	}
 
 	msg := map[string]interface{}{
@@ -338,8 +354,8 @@ func (c *MailDraftsCreateCmd) Run(root *Root) error {
 		},
 		"toRecipients": formatRecipients(c.To),
 	}
+	addRecipientsIfPresent(msg, c.Cc, c.Bcc)
 
-	ctx := context.Background()
 	data, err := client.Post(ctx, "/me/messages", msg)
 	if err != nil {
 		return err
@@ -352,6 +368,54 @@ func (c *MailDraftsCreateCmd) Run(root *Root) error {
 
 	fmt.Printf("✓ Draft created: %s\n", graph.FormatID(created.ID))
 	return nil
+}
+
+// createReplyDraft builds a threaded reply draft and returns its ID WITHOUT
+// sending it. Graph's createReply pre-fills the recipients from the original
+// message and keeps the quoted original; the user's text is passed as the
+// comment so it lands above the quote. Supplied --to/--cc/--bcc override or
+// extend the pre-filled recipients. The draft is left in the Drafts folder for
+// review. If setting recipients fails, deletion of the half-built draft is
+// attempted and its outcome is reported in the error so the message never
+// claims the draft was removed when it actually remains.
+func (c *MailDraftsCreateCmd) createReplyDraft(ctx context.Context, client graph.Client, messageID, body string) (string, error) {
+	createBody := map[string]interface{}{}
+	if body != "" {
+		createBody["comment"] = body
+	}
+	data, err := client.Post(ctx, fmt.Sprintf("/me/messages/%s/createReply", messageID), createBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to create reply draft for message %s: %w", graph.FormatID(messageID), err)
+	}
+	var draft Message
+	if err := json.Unmarshal(data, &draft); err != nil {
+		return "", err
+	}
+	if draft.ID == "" {
+		return "", fmt.Errorf("createReply returned no draft message id")
+	}
+	draftID := draft.ID
+
+	// Only override recipients the user actually supplied; otherwise keep the
+	// original sender that createReply already filled in.
+	update := map[string]interface{}{}
+	if len(c.To) > 0 {
+		update["toRecipients"] = formatRecipients(c.To)
+	}
+	addRecipientsIfPresent(update, c.Cc, c.Bcc)
+	if len(update) > 0 {
+		if _, err := client.Patch(ctx, fmt.Sprintf("/me/messages/%s", draftID), update); err != nil {
+			// cleanup deletes the half-built draft and describes the outcome, so a
+			// failed deletion is never reported as a successful removal.
+			cleanup := fmt.Sprintf("orphaned draft %s removed", graph.FormatID(draftID))
+			if delErr := client.Delete(ctx, fmt.Sprintf("/me/messages/%s", draftID)); delErr != nil {
+				cleanup = fmt.Sprintf("orphaned draft %s could NOT be removed (%v)", graph.FormatID(draftID), delErr)
+			}
+			return "", fmt.Errorf("failed to set recipients on reply draft (%s): %w", cleanup, err)
+		}
+	}
+
+	return draftID, nil
 }
 
 // MailDraftsSendCmd sends a draft.

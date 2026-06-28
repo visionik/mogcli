@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `--reply-to-message-id <id>` flag for `mail drafts create`. Creates the draft as a threaded reply (`createReply`, keeping the quoted original) and leaves it in the Drafts folder for review instead of sending. `--to`/`--subject` become optional — recipients default to the original sender and are only overridden when supplied. `--cc`/`--bcc` are honoured; if setting recipients fails, the half-built draft is deleted and the deletion outcome is reported. Also adds `--cc`/`--bcc` to `mail drafts create` for the non-reply case.
+
 ## [0.3.1] - 2026-01-26
 
 ### Added
